@@ -1,0 +1,125 @@
+{
+    "keyword": "openssh",
+    "CVE_Items": [
+        {
+            "cve_id": "CVE-1999-0661",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "A system is running a version of software that was replaced with a Trojan Horse at one of its distribution points, such as (1) TCP Wrappers 7.6, (2) util-linux 2.9g, (3) wuarchive ftpd (wuftpd) 2.2 and 2.1f, (4) IRC client (ircII) ircII 2.2.9, (5) OpenSSH 3.4p1, or (6) Sendmail 8.12.6."
+        },
+        {
+            "cve_id": "CVE-2000-0525",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH does not properly drop privileges when the UseLogin option is enabled, which allows local users to execute arbitrary commands by providing the command to the ssh daemon."
+        },
+        {
+            "cve_id": "CVE-2000-0535",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSL 0.9.4 and OpenSSH for FreeBSD do not properly check for the existence of the /dev/random or /dev/urandom devices, which are absent on FreeBSD Alpha systems, which causes them to produce weak keys which may be more easily broken."
+        },
+        {
+            "cve_id": "CVE-2000-1169",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH SSH client before 2.3.0 does not properly disable X11 or agent forwarding, which could allow a malicious SSH server to gain access to the X11 display and sniff X11 events, or gain access to the ssh-agent."
+        },
+        {
+            "cve_id": "CVE-2001-1459",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH 2.9 and earlier does not initiate a Pluggable Authentication Module (PAM) session if commands are executed with no pty, which allows local users to bypass resource limits (rlimits) set in pam.d."
+        },
+        {
+            "cve_id": "CVE-2001-0361",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Implementations of SSH version 1.5, including (1) OpenSSH up to version 2.3.0, (2) AppGate, and (3) ssh-1 up to version 1.2.31, in certain configurations, allow a remote attacker to decrypt and/or alter traffic via a \"Bleichenbacher attack\" on PKCS#1 version 1.5."
+        },
+        {
+            "cve_id": "CVE-2001-0529",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH version 2.9 and earlier, with X forwarding enabled, allows a local attacker to delete any file named 'cookies' via a symlink attack."
+        },
+        {
+            "cve_id": "CVE-2001-0572",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "The SSH protocols 1 and 2 (aka SSH-2) as implemented in OpenSSH and other packages have various weaknesses which can allow a remote attacker to obtain the following information via sniffing: (1) password lengths or ranges of lengths, which simplifies brute force password guessing, (2) whether RSA or DSA authentication is being used, (3) the number of authorized_keys in RSA authentication, or (4) the lengths of shell commands."
+        },
+        {
+            "cve_id": "CVE-2001-1029",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "libutil in OpenSSH on FreeBSD 4.4 and earlier does not drop privileges before verifying the capabilities for reading the copyright and welcome files, which allows local users to bypass the capabilities checks and read arbitrary files by specifying alternate copyright or welcome files."
+        },
+        {
+            "cve_id": "CVE-2001-1382",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "The \"echo simulation\" traffic analysis countermeasure in OpenSSH before 2.9.9p2 sends an additional echo packet after the password and carriage return is entered, which could allow remote attackers to determine that the countermeasure is being used."
+        },
+        {
+            "cve_id": "CVE-2001-1380",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH before 2.9.9, while using keypairs and multiple keys of different types in the ~/.ssh/authorized_keys2 file, may not properly handle the \"from\" option associated with a key, which could allow remote attackers to login from unauthorized IP addresses."
+        },
+        {
+            "cve_id": "CVE-2001-0816",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH before 2.9.9, when running sftp using sftp-server and using restricted keypairs, allows remote authenticated users to bypass authorized_keys2 command= restrictions using sftp commands."
+        },
+        {
+            "cve_id": "CVE-2001-0872",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH 3.0.1 and earlier with UseLogin enabled does not properly cleanse critical environment variables such as LD_PRELOAD, which allows local users to gain root privileges."
+        },
+        {
+            "cve_id": "CVE-2001-1507",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "OpenSSH before 3.0.1 with Kerberos V enabled does not properly authenticate users, which could allow remote attackers to login unchallenged."
+        },
+        {
+            "cve_id": "CVE-2001-1585",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "SSH protocol 2 (aka SSH-2) public key authentication in the development snapshot of OpenSSH 2.3.1, available from 2001-01-18 through 2001-02-08, does not perform a challenge-response step to ensure that the client has the proper private key, which allows remote attackers to bypass authentication as other users by supplying a public key from that user's authorized_keys file."
+        },
+        {
+            "cve_id": "CVE-2002-0083",
+            "severity": "CRITICAL",
+            "score": 9.8,
+            "description": "Off-by-one error in the channel code of OpenSSH 2.0 through 3.0.2 allows local users or remote malicious servers to gain privileges."
+        },
+        {
+            "cve_id": "CVE-2002-0575",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Buffer overflow in OpenSSH before 2.9.9, and 3.x before 3.2.1, with Kerberos/AFS support and KerberosTgtPassing or AFSTokenPassing enabled, allows remote and local authenticated users to gain privileges."
+        },
+        {
+            "cve_id": "CVE-2002-0639",
+            "severity": "CRITICAL",
+            "score": 9.8,
+            "description": "Integer overflow in sshd in OpenSSH 2.9.9 through 3.3 allows remote attackers to execute arbitrary code during challenge response authentication (ChallengeResponseAuthentication) when OpenSSH is using SKEY or BSD_AUTH authentication."
+        },
+        {
+            "cve_id": "CVE-2002-0640",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Buffer overflow in sshd in OpenSSH 2.3.1 through 3.3 may allow remote attackers to execute arbitrary code via a large number of responses during challenge response authentication when OpenBSD is using PAM modules with interactive keyboard authentication (PAMAuthenticationViaKbdInt)."
+        },
+        {
+            "cve_id": "CVE-2002-0765",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "sshd in OpenSSH 3.2.2, when using YP with netgroups and under certain conditions, may allow users to successfully authenticate and log in with another user's password."
+        }
+    ]
+}

@@ -1,0 +1,125 @@
+{
+    "keyword": "mysql",
+    "CVE_Items": [
+        {
+            "cve_id": "CVE-1999-1188",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "mysqld in MySQL 3.21 creates log files with world-readable permissions, which allows local users to obtain passwords for users who are added to the user database."
+        },
+        {
+            "cve_id": "CVE-1999-0652",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Rejected reason: DO NOT USE THIS CANDIDATE NUMBER.  ConsultIDs: None.  Reason: this candidate is solely about a configuration that does not directly introduce security vulnerabilities, so it is more appropriate to cover under the Common Configuration Enumeration (CCE).  Notes: the former description is: \"A database service is running, e.g. a SQL server, Oracle, or mySQL."
+        },
+        {
+            "cve_id": "CVE-2000-0045",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "MySQL allows local users to modify passwords for arbitrary MySQL users via the GRANT privilege."
+        },
+        {
+            "cve_id": "CVE-2000-0148",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "MySQL 3.22 allows remote attackers to bypass password authentication and access a database via a short check string."
+        },
+        {
+            "cve_id": "CVE-2000-0707",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "PCCS MySQLDatabase Admin Tool Manager 1.2.4 and earlier installs the file dbconnect.inc within the web root, which allows remote attackers to obtain sensitive information such as the administrative password."
+        },
+        {
+            "cve_id": "CVE-2000-0957",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "The pluggable authentication module for mysql (pam_mysql) before 0.4.7 does not properly cleanse user input when constructing SQL statements, which allows attackers to obtain plaintext passwords or hashes."
+        },
+        {
+            "cve_id": "CVE-2000-0981",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "MySQL Database Engine uses a weak authentication method which leaks information that could be used by a remote attacker to recover the password."
+        },
+        {
+            "cve_id": "CVE-2001-1044",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Basilix Webmail 0.9.7beta, and possibly other versions, stores *.class and *.inc files under the document root and does not restrict access, which could allows remote attackers to obtain sensitive information such as MySQL passwords and usernames from the mysql.class file."
+        },
+        {
+            "cve_id": "CVE-2001-1275",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "MySQL before 3.23.31 allows users with a MySQL account to use the SHOW GRANTS command to obtain the encrypted administrator password from the mysql.user table and possibly gain privileges via password cracking."
+        },
+        {
+            "cve_id": "CVE-2001-1274",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Buffer overflow in MySQL before 3.23.31 allows attackers to cause a denial of service and possibly gain privileges."
+        },
+        {
+            "cve_id": "CVE-2001-1453",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Buffer overflow in libmysqlclient.so in MySQL 3.23.33 and earlier allows remote attackers to execute arbitrary code via a long host parameter."
+        },
+        {
+            "cve_id": "CVE-2001-1454",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Buffer overflow in MySQL before 3.23.33 allows remote attackers to execute arbitrary code via a long drop database request."
+        },
+        {
+            "cve_id": "CVE-2001-0407",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Directory traversal vulnerability in MySQL before 3.23.36 allows local users to modify arbitrary files and gain privileges by creating a database whose name starts with .. (dot dot)."
+        },
+        {
+            "cve_id": "CVE-2001-0990",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Inter7 vpopmail 4.10.35 and earlier, when using the MySQL module, compiles authentication information in cleartext into the libvpopmail.a library, which allows local users to obtain the MySQL username and password by inspecting the vpopmail programs that use the library."
+        },
+        {
+            "cve_id": "CVE-2001-0645",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Symantec/AXENT NetProwler 3.5.x contains several default passwords, which could allow remote attackers to (1) access to the management tier via the \"admin\" password, or (2) connect to a MySQL ODBC from the management tier using a blank password."
+        },
+        {
+            "cve_id": "CVE-2001-1255",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "WinMySQLadmin 1.1 stores the MySQL password in plain text in the my.ini file, which allows local users to obtain unathorized access the MySQL database."
+        },
+        {
+            "cve_id": "CVE-2001-1226",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "AdCycle 1.17 and earlier allow remote attackers to modify SQL queries, which are not properly sanitized before being passed to the MySQL database."
+        },
+        {
+            "cve_id": "CVE-2002-0229",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Safe Mode feature (safe_mode) in PHP 3.0 through 4.1.0 allows attackers with access to the MySQL database to bypass Safe Mode access restrictions and read arbitrary files using \"LOAD DATA INFILE LOCAL\" SQL statements."
+        },
+        {
+            "cve_id": "CVE-2002-0969",
+            "severity": "HIGH",
+            "score": 7.8,
+            "description": "Buffer overflow in MySQL daemon (mysqld) before 3.23.50, and 4.0 beta before 4.02, on the Win32 platform, allows local users to execute arbitrary code via a long \"datadir\" parameter in the my.ini initialization file, whose permissions on Windows allow Full Control to the Everyone group."
+        },
+        {
+            "cve_id": "CVE-2002-1373",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Signed integer vulnerability in the COM_TABLE_DUMP package for MySQL 3.23.x before 3.23.54 allows remote attackers to cause a denial of service (crash or hang) in mysqld by causing large negative integers to be provided to a memcpy call."
+        }
+    ]
+}

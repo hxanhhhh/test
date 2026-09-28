@@ -1,0 +1,51 @@
+# Python bytecode and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local secrets (keep example configuration trackable)
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Django runtime data
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+/media/
+/staticfiles/
+*.log
+
+# Generated vector database and downloaded Exploit-DB mirror
+/chroma_data/
+/analyzer/knowledge_base/exploits_poc/exploitdb/
+
+# Test, type-checker, and linter caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local editor and agent settings
+.vscode/
+.idea/
+.agents/
+.codex/
+*.swp
+*.swo
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db

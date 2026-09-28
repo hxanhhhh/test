@@ -1,0 +1,125 @@
+{
+    "keyword": "vsftpd",
+    "CVE_Items": [
+        {
+            "cve_id": "CVE-2003-0135",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "vsftpd FTP daemon in Red Hat Linux 9 is not compiled against TCP wrappers (tcp_wrappers) but is installed as a standalone service, which inadvertently prevents vsftpd from restricting access as intended."
+        },
+        {
+            "cve_id": "CVE-2004-0042",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "vsftpd 1.1.3 generates different error messages depending on whether or not a valid username exists, which allows remote attackers to identify valid usernames."
+        },
+        {
+            "cve_id": "CVE-2004-2259",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "vsftpd before 1.2.2, when under heavy load, allows attackers to cause a denial of service (crash) via a SIGCHLD signal during a malloc or free call, which is not re-entrant."
+        },
+        {
+            "cve_id": "CVE-2005-4713",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Unspecified vulnerability in the SQL logging facility in PAM-MySQL 0.6.x before 0.6.2 and 0.7.x before 0.7pre3 allows remote attackers to cause a denial of service (segmentation fault) via unspecified vectors, probably involving the pam_mysql_sql_log function when being used in vsftpd, which does not include the IP address argument to an sprintf call."
+        },
+        {
+            "cve_id": "CVE-2007-4322",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "BlockHosts before 2.0.4 does not properly parse (1) sshd and (2) vsftpd log files, which allows remote attackers to add arbitrary deny entries to the /etc/hosts.allow file and cause a denial of service by adding arbitrary IP addresses to a daemon log file, as demonstrated by connecting through ssh with a client protocol version identification containing an IP address string, or connecting through ftp with a username containing an IP address string, different vectors than CVE-2007-2765."
+        },
+        {
+            "cve_id": "CVE-2007-5962",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Memory leak in a certain Red Hat patch, applied to vsftpd 2.0.5 on Red Hat Enterprise Linux (RHEL) 5 and Fedora 6 through 8, and on Foresight Linux and rPath appliances, allows remote attackers to cause a denial of service (memory consumption) via a large number of CWD commands, as demonstrated by an attack on a daemon with the deny_file configuration option."
+        },
+        {
+            "cve_id": "CVE-2008-2375",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Memory leak in a certain Red Hat deployment of vsftpd before 2.0.5 on Red Hat Enterprise Linux (RHEL) 3 and 4, when PAM is used, allows remote attackers to cause a denial of service (memory consumption) via a large number of invalid authentication attempts within the same session, a different vulnerability than CVE-2007-5962."
+        },
+        {
+            "cve_id": "CVE-2009-4457",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Multiple unspecified vulnerabilities in the Vsftpd Webmin module before 1.3b for the Vsftpd server have unknown impact and attack vectors related to \"Some security issues.\""
+        },
+        {
+            "cve_id": "CVE-2011-0762",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "The vsf_filename_passes_filter function in ls.c in vsftpd before 2.3.3 allows remote authenticated users to cause a denial of service (CPU consumption and process slot exhaustion) via crafted glob expressions in STAT commands in multiple FTP sessions, a different vulnerability than CVE-2010-2632."
+        },
+        {
+            "cve_id": "CVE-2011-2189",
+            "severity": "HIGH",
+            "score": 7.5,
+            "description": "net/core/net_namespace.c in the Linux kernel 2.6.32 and earlier does not properly handle a high rate of creation and cleanup of network namespaces, which makes it easier for remote attackers to cause a denial of service (memory consumption) via requests to a daemon that requires a separate namespace per connection, as demonstrated by vsftpd."
+        },
+        {
+            "cve_id": "CVE-2012-2127",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "fs/proc/root.c in the procfs implementation in the Linux kernel before 3.2 does not properly interact with CLONE_NEWPID clone system calls, which allows remote attackers to cause a denial of service (reference leak and memory consumption) by making many connections to a daemon that uses PID namespaces to isolate clients, as demonstrated by vsftpd."
+        },
+        {
+            "cve_id": "CVE-2009-5029",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Integer overflow in the __tzfile_read function in glibc before 2.15 allows context-dependent attackers to cause a denial of service (crash) and possibly execute arbitrary code via a crafted timezone (TZ) file, as demonstrated using vsftpd."
+        },
+        {
+            "cve_id": "CVE-2015-1419",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "Unspecified vulnerability in vsftpd 3.0.2 and earlier allows remote attackers to bypass access restrictions via unknown vectors, related to deny_file parsing."
+        },
+        {
+            "cve_id": "CVE-2017-8218",
+            "severity": "UNKNOWN",
+            "score": 0.0,
+            "description": "vsftpd on TP-Link C2 and C20i devices through firmware 0.9.1 4.2 v0032.0 Build 160706 Rel.37961n has a backdoor admin account with the 1234 password, a backdoor guest account with the guest password, and a backdoor test account with the test password."
+        },
+        {
+            "cve_id": "CVE-2011-2523",
+            "severity": "CRITICAL",
+            "score": 9.8,
+            "description": "vsftpd 2.3.4 downloaded between 20110630 and 20110703 contains a backdoor which opens a shell on port 6200/tcp."
+        },
+        {
+            "cve_id": "CVE-2021-30047",
+            "severity": "HIGH",
+            "score": 7.5,
+            "description": "VSFTPD 3.0.3 allows attackers to cause a denial of service due to limited number of connections allowed."
+        },
+        {
+            "cve_id": "CVE-2025-44655",
+            "severity": "CRITICAL",
+            "score": 9.8,
+            "description": "In TOTOLink A7100RU V7.4, A950RG V5.9, and T10 V5.9, the chroot_local_user option is enabled in the vsftpd.conf. This could lead to unauthorized access to system files, privilege escalation, or use of the compromised server as a pivot point for internal network attacks."
+        },
+        {
+            "cve_id": "CVE-2025-44657",
+            "severity": "LOW",
+            "score": 3.9,
+            "description": "In Linksys EA6350 V2.1.2, the chroot_local_user option is enabled in the dynamically generated vsftpd configuration file. This could lead to unauthorized access to system files, privilege escalation, or use of the compromised server as a pivot point for internal network attacks."
+        },
+        {
+            "cve_id": "CVE-2025-44654",
+            "severity": "CRITICAL",
+            "score": 9.8,
+            "description": "In Linksys E2500 3.0.04.002, the chroot_local_user option is enabled in the vsftpd configuration file. This could lead to unauthorized access to system files, privilege escalation, or use of the compromised server as a pivot point for internal network attacks."
+        },
+        {
+            "cve_id": "CVE-2025-8181",
+            "severity": "HIGH",
+            "score": 7.2,
+            "description": "A vulnerability, which was classified as critical, was found in TOTOLINK N600R and X2000R 1.0.0.1. This affects an unknown part of the file vsftpd.conf of the component FTP Service. The manipulation leads to least privilege violation. It is possible to initiate the attack remotely."
+        }
+    ]
+}
