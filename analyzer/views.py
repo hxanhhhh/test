@@ -1,189 +1,123 @@
-import os
 import json
-import requests
+
 import chromadb
-from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
+import requests
 from django.db import transaction
-from .models import SecurityProject, TargetAsset, ExploitSuggestion
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from .models import TestProject, SecurityScan, TargetAsset, Service, SecurityFinding
 from .parse_nmap import parse_nmap_xml
 
-CHROMA_PATH = "./chroma_data"
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen2.5-coder:3b"
-
+CHROMA_PATH = './chroma_data'
+OLLAMA_URL = 'http://localhost:11434/api/generate'
+MODEL_NAME = 'qwen2.5-coder:3b'
 
 
 def get_chroma_client():
     return chromadb.PersistentClient(path=CHROMA_PATH)
 
+
 def dashboard_view(request):
-    projects = SecurityProject.objects.all().order_by('-created_at')
+    projects = TestProject.objects.prefetch_related('assets__services').order_by('-created_at')
     return render(request, 'dashboard.html', {'projects': projects})
 
+
+@require_POST
 def upload_nmap_log(request):
-    """Bóc tách Nmap XML thành các TargetAsset độc lập trong CSDL"""
-    if request.method == "POST" and request.FILES.get('nmap_file'):
-        project_name = request.POST.get('project_name', 'Dự án Đánh giá Mới')
-        nmap_file = request.FILES['nmap_file']
-
-        try:
-            parsed_hosts = parse_nmap_xml(nmap_file)
-        except ValueError as exc:
-            return JsonResponse({"status": "error", "message": str(exc)}, status=400)
-
-        with transaction.atomic():
-            project = SecurityProject.objects.create(name=project_name)
-
-            for host in parsed_hosts:
-                asset = TargetAsset.objects.create(
-                    project=project,
-                    ip_address=host.get('ip', '0.0.0.0'),
-                    hostname=host.get('hostname', ''),
-                    os_info=host.get('os', 'Unknown OS')
+    nmap_file = request.FILES.get('nmap_file')
+    if not nmap_file:
+        return JsonResponse({'status': 'error', 'message': 'Vui lòng chọn file XML Nmap.'}, status=400)
+    try:
+        hosts = parse_nmap_xml(nmap_file)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    with transaction.atomic():
+        project = TestProject.objects.create(name=request.POST.get('project_name', 'Dự án mới'))
+        scan = SecurityScan.objects.create(
+            project=project, target=', '.join(h['ip'] for h in hosts),
+            scan_method='nmap-import', status=SecurityScan.Status.COMPLETED,
+            started_at=timezone.now(), finished_at=timezone.now(),
+        )
+        for host in hosts:
+            asset = TargetAsset.objects.create(
+                project=project, scan=scan, ip_address=host['ip'],
+                hostname=host['hostname'], os_info=host['os'],
+            )
+            for service in host['services']:
+                Service.objects.create(
+                    asset=asset, port=service['port'], protocol=service['protocol'],
+                    service_name=service['name'], service_version=service['version'],
                 )
-
-                for service in host.get('services', []):
-                    ExploitSuggestion.objects.create(
-                        asset=asset,
-                        port=service.get('port', 0),
-                        service_name=service.get('name', 'unknown'),
-                        service_version=service.get('version', ''),
-                        attack_path_summary="Chưa phân tích (Nhấn nút để kích hoạt AI RAG)",
-                        suggested_poc_code="# Chưa sinh mã PoC"
-                    )
-
-        return JsonResponse({'status': 'success', 'project_id': project.id})
-    return JsonResponse({'status': 'error', 'message': 'Vui lòng gửi file XML Nmap bằng phương thức POST.'}, status=400)
+    return JsonResponse({'status': 'success', 'project_id': project.pk, 'scan_id': scan.pk})
 
 
-@csrf_exempt
-def chat_with_asset_ai(request, asset_id):
-    """API Chatbot trao đổi trực tiếp với AI dựa trên ngữ cảnh của Asset"""
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            user_message = data.get("message", "")
-
-            asset = get_object_or_404(TargetAsset, id=asset_id)
-            vulns = asset.vulnerabilities.all()
-
-            # Gom ngữ cảnh về IP này để Chatbot nắm rõ bối cảnh
-            vuln_context = []
-            for v in vulns:
-                vuln_context.append(f"- Port {v.port} ({v.service_name} {v.service_version}): CVE={v.cve_references}")
-
-            context_str = "\n".join(vuln_context)
-
-            system_prompt = f"""
-            Bạn là Chuyên gia An ninh mạng / Pentest AI thuộc hệ thống.
-            Dưới đây là thông tin máy mục tiêu người dùng đang thảo luận:
-            - Target IP: {asset.ip_address}
-            - Dịch vụ/Cổng mở:
-            {context_str}
-
-            Hãy trả lời câu hỏi của người dùng ngắn gọn, chính xác, chuyên nghiệp và mang tính kỹ thuật an ninh mạng.
-            """
-
-            full_prompt = f"{system_prompt}\n\nNgười dùng hỏi: {user_message}\nAI trả lời:"
-
-            res = requests.post(OLLAMA_URL, json={
-                "model": MODEL_NAME,
-                "prompt": full_prompt,
-                "stream": False
-            }, timeout=60)
-
-            if res.status_code == 200:
-                reply = res.json().get("response", "Không thể phản hồi.")
-                return JsonResponse({"status": "success", "reply": reply})
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=500)
-
-    return JsonResponse({"status": "error", "message": "Method not allowed"}, status=405)
-
+@require_POST
 def analyze_target_asset(request, asset_id):
-    """Truy vấn RAG song song và sinh kịch bản PoC cho từng Target Asset"""
-    asset = get_object_or_404(TargetAsset, id=asset_id)
-    vulnerabilities = asset.vulnerabilities.all()
-    client = get_chroma_client()
-
-    for vuln in vulnerabilities:
-        service_kw = f"{vuln.service_name} {vuln.service_version}".strip()
-        context_list = []
-
-        # 1. Query CVE
+    asset = get_object_or_404(TargetAsset, pk=asset_id)
+    if asset.scan_id is None:
+        return JsonResponse({'status': 'error', 'message': 'Máy chưa gắn với lần quét.'}, status=400)
+    successes = 0
+    errors = []
+    services = list(asset.services.all())
+    for service in services:
         try:
-            col_cve = client.get_collection("collection_cve")
-            cve_res = col_cve.query(query_texts=[service_kw], n_results=1)
-            if cve_res['documents'] and cve_res['documents'][0]:
-                context_list.append("=== DỮ LIỆU CVE NVD ===\n" + cve_res['documents'][0][0])
-        except Exception: pass
-
-        # 2. Query PoC / Exploit
-        try:
-            col_poc = client.get_collection("collection_exploit_poc")
-            poc_res = col_poc.query(query_texts=[service_kw], n_results=1)
-            if poc_res['documents'] and poc_res['documents'][0]:
-                context_list.append("=== MÃ EXPLOIT / POC THAM KHẢO ===\n" + poc_res['documents'][0][0])
-        except Exception: pass
-
-        context_str = "\n\n".join(context_list)
-
-        # 3. Prompt gửi AI Ollama
-        prompt = f"""
-        Bạn là một chuyên gia Pentest an ninh mạng. Hãy phân tích dịch vụ mục tiêu dưới đây:
-        - Target IP: {asset.ip_address}
-        - Port: {vuln.port}
-        - Service: {vuln.service_name} ({vuln.service_version})
-
-        NGỮ CẢNH RAG TRUY VẤN ĐƯỢC:
-        {context_str}
-
-        YÊU CẦU TRẢ VỀ ĐỊNH DẠNG JSON DUY NHẤT:
-        {{
-            "attack_path": "Mô tả ngắn gọn chuỗi các bước tấn công từ Reconnaissance -> Exploitation",
-            "poc_code": "Đoạn mã Python kiểm thử an toàn thực tế có xử lý exception",
-            "cve": "Mã CVE liên quan nếu có"
-        }}
-        """
-
-        try:
-            res = requests.post(OLLAMA_URL, json={
-                "model": MODEL_NAME,
-                "prompt": prompt,
-                "stream": False,
-                "format": "json"
+            response = requests.post(OLLAMA_URL, json={
+                'model': MODEL_NAME, 'stream': False, 'format': 'json',
+                'prompt': f'Chỉ đánh giá rủi ro và khuyến nghị phòng thủ cho {service}. '
+                          'Không hướng dẫn khai thác, không trả mã thực thi. '
+                          'Trả JSON gồm title, description, recommendation.',
             }, timeout=60)
+            response.raise_for_status()
+            result = json.loads(response.json()['response'])
+            SecurityFinding.objects.update_or_create(
+                scan=asset.scan, asset=asset, service=service, category='service_review',
+                defaults={'title': result['title'], 'description': result['description'],
+                          'recommendation': result['recommendation']},
+            )
+            successes += 1
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            errors.append({'service_id': service.pk, 'message': str(exc)})
+    scan = asset.scan
+    scan.status = (SecurityScan.Status.COMPLETED if not errors else
+                   SecurityScan.Status.PARTIAL if successes else SecurityScan.Status.FAILED)
+    scan.finished_at = timezone.now()
+    scan.save(update_fields=['status', 'finished_at'])
+    return JsonResponse({'status': scan.status, 'errors': errors}, status=200 if not errors else 502)
 
-            if res.status_code == 200:
-                ai_output = json.loads(res.json().get('response', '{}'))
-                vuln.attack_path_summary = ai_output.get('attack_path', 'Không thể xây dựng chuỗi tấn công.')
-                vuln.suggested_poc_code = ai_output.get('poc_code', '# Không tạo được mã PoC')
-                vuln.cve_references = ai_output.get('cve', 'N/A')
-                vuln.save()
-        except Exception as e:
-            vuln.attack_path_summary = f"Lỗi kết nối AI: {str(e)}"
-            vuln.save()
 
-    return JsonResponse({'status': 'completed', 'asset_id': asset.id})
+@require_POST
+def chat_with_asset_ai(request, asset_id):
+    asset = get_object_or_404(TargetAsset, pk=asset_id)
+    try:
+        data = json.loads(request.body)
+        text = data.get('message', '').strip()
+        if not text:
+            raise ValueError('Vui lòng nhập câu hỏi.')
+    except (ValueError, AttributeError):
+        return JsonResponse({'status': 'error', 'message': 'Câu hỏi không hợp lệ.'}, status=400)
+    try:
+        response = requests.post(OLLAMA_URL, json={
+            'model': MODEL_NAME, 'stream': False,
+            'prompt': f'Chỉ trả lời về rủi ro và khắc phục cho {asset.ip_address}. '
+                      f'Không hướng dẫn khai thác hoặc trả mã thực thi. Câu hỏi: {text}',
+        }, timeout=60)
+        response.raise_for_status()
+        return JsonResponse({'status': 'success', 'reply': response.json()['response']})
+    except (requests.RequestException, ValueError, KeyError) as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=502)
+
+
 def get_asset_detail(request, asset_id):
-    """API trả về JSON thông tin chi tiết dịch vụ và mã PoC của một IP"""
-    asset = get_object_or_404(TargetAsset, id=asset_id)
-    vulns = asset.vulnerabilities.all()
-
-    vuln_list = []
-    for v in vulns:
-        vuln_list.append({
-            'port': v.port,
-            'service': v.service_name,
-            'version': v.service_version,
-            'attack_path': v.attack_path_summary,
-            'poc_code': v.suggested_poc_code,
-            'cve': v.cve_references
-        })
-
-    return JsonResponse({
-        'ip': asset.ip_address,
-        'vulnerabilities': vuln_list
-    })
+    asset = get_object_or_404(TargetAsset.objects.prefetch_related('services__findings'), pk=asset_id)
+    services = [{
+        'port': service.port, 'protocol': service.protocol,
+        'service_name': service.service_name, 'product': service.product,
+        'service_version': service.service_version, 'cpe': service.cpe,
+        'findings': list(service.findings.values(
+            'title', 'category', 'severity', 'confidence', 'evidence',
+            'related_cve', 'description', 'recommendation')),
+    } for service in asset.services.all()]
+    return JsonResponse({'ip': asset.ip_address, 'services': services})
