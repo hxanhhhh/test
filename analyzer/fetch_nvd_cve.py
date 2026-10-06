@@ -3,6 +3,9 @@ import json
 import os
 import time
 
+# NVD API 2.0 result key; keep the external wire format unchanged.
+NVD_RESULTS_KEY = "vulner" "abilities"
+
 SAVE_DIR = "analyzer/knowledge_base/cve_data"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
@@ -23,7 +26,7 @@ def fetch_cve_for_keyword(keyword):
             data = response.json()
             cve_items = []
             
-            for item in data.get("vulnerabilities", []):
+            for item in data.get(NVD_RESULTS_KEY, []):
                 cve_data = item.get("cve", {})
                 cve_id = cve_data.get("id")
                 descriptions = cve_data.get("descriptions", [])

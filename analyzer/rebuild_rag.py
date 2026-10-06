@@ -18,9 +18,7 @@ def rebuild_all_collections():
     
     collections = {
         "collection_cve": "Lưu trữ thông tin chi tiết CVE, CVSS và mô tả",
-        "collection_attack_technique": "Lưu trữ kỹ thuật tấn công MITRE ATT&CK",
-        "collection_exploit_poc": "Lưu trữ mã khai thác mẫu PoC",
-        "collection_service_guide": "Lưu trữ cẩm nang Pentest theo dịch vụ"
+        "collection_service_guide": "Lưu trữ hướng dẫn cấu hình và khắc phục theo dịch vụ"
     }
     
     active_cols = {}
@@ -61,36 +59,7 @@ def rebuild_all_collections():
                         cve_count += 1
         print(f" -> Hoàn thành nạp {cve_count} bản ghi CVE!")
 
-# 2. NẠP DỮ LIỆU POC / EXPLOITS (.py, .md, .rb, .txt)
-    poc_dir = os.path.join(KB_DIR, "exploits_poc")
-    if os.path.exists(poc_dir):
-        print("\n📦 Đang nạp dữ liệu Exploit / PoC...")
-        poc_count = 0
-        MAX_POC = 300  # <--- THÊM DÒNG NÀY ĐỂ GIỚI HẠN 300 FILE DEMO
-        
-        for root, _, files in os.walk(poc_dir):
-            if poc_count >= MAX_POC:
-                break
-            for file in files:
-                if poc_count >= MAX_POC:
-                    break
-                if file.endswith((".py", ".md", ".rb", ".txt")):
-                    file_path = os.path.join(root, file)
-                    try:
-                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                            content = f.read()
-                        if content.strip():
-                            poc_count += 1
-                            active_cols["collection_exploit_poc"].upsert(
-                                documents=[content[:2000]],
-                                metadatas=[{"filename": file}],
-                                ids=[f"poc_{poc_count}"]
-                            )
-                    except Exception:
-                        continue
-        print(f" -> Hoàn thành nạp {poc_count} mã PoC!")
-
-    # 3. NẠP TÀI LIỆU CẨM NANG DỊCH VỤ (.md)
+    # 2. NẠP TÀI LIỆU CẨM NANG DỊCH VỤ (.md)
     guide_dir = os.path.join(KB_DIR, "service_guides")
     if os.path.exists(guide_dir):
         print("\n📦 Đang nạp dữ liệu Service Guides...")
