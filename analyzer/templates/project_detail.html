@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<h1>{{ project.name }}</h1><p>{{ project.target_url }}</p><p class="text">{{ project.description }}</p>
+<h2>Phạm vi cho phép</h2><ul>{% for host in project.get_allowed_hosts %}<li>{{ host }}</li>{% empty %}<li>Chưa khai báo.</li>{% endfor %}</ul>
+<nav class="tabs" aria-label="Loại kiểm thử"><a class="{% if tab == 'functional' %}active{% endif %}" href="?tab=functional">Functional</a><a class="{% if tab == 'security' %}active{% endif %}" href="?tab=security">Security</a></nav>
+{% if tab == 'functional' %}
+<section><h2>Functional</h2>
+{% for case in test_cases %}<article><h3>{{ case.name }}</h3><p>Nguồn: {{ case.get_source_display }} · Đã duyệt: {{ case.approved|yesno:'Có,Không' }}</p><ol>{% for step in case.steps %}<li>{{ step.action }} — {{ step.expected }}</li>{% endfor %}</ol><p>{{ case.expected_result }}</p></article>{% empty %}<p>Chưa có test case</p>{% endfor %}
+</section>
+{% else %}
+<section><h2>Security</h2><p>Nhập dữ liệu quét có sẵn để đánh giá rủi ro và khuyến nghị khắc phục.</p>
+<form action="{% url 'project_import_nmap' project.pk %}" method="post" enctype="multipart/form-data">{% csrf_token %}{{ import_form.as_p }}<button>Nhập Nmap XML</button></form>
+<h3>Các lần quét</h3><ul>{% for scan in scans %}<li><a href="{% url 'scan_detail' scan.pk %}">Scan #{{ scan.pk }} — {{ scan.target }}</a> · {{ scan.get_status_display }} · {{ scan.scan_method }}</li>{% empty %}<li>Chưa có lần quét.</li>{% endfor %}</ul></section>
+{% endif %}
+{% endblock %}

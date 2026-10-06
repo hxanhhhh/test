@@ -102,3 +102,22 @@ class ChatTests(AnalysisStatusTests):
         self.assertIn('OpenSSH', prompt)
         self.assertIn('Review SSH support', prompt)
         self.assertIn('Không hướng dẫn khai thác', prompt)
+
+
+class ProjectInterfaceTests(TestCase):
+    def test_project_creation_and_browser_import(self):
+        response = self.client.post('/', {'name': 'Browser project',
+            'target_url': 'http://localhost/', 'description': 'Review',
+            'allowed_hosts': '127.0.0.1\n'})
+        project = TestProject.objects.get()
+        self.assertRedirects(response, f'/projects/{project.pk}/')
+        self.assertContains(self.client.get(f'/projects/{project.pk}/'), 'Chưa có test case')
+        response = self.client.post(f'/projects/{project.pk}/import/', {
+            'nmap_file': SimpleUploadedFile('sample.xml', Path('nmap_sample.xml').read_bytes()),
+        }, follow=True)
+        scan = project.scans.get()
+        self.assertEqual(response.redirect_chain, [(f'/scans/{scan.pk}/', 302)])
+        self.assertContains(response, 'Đã nhập kết quả Nmap.')
+        self.assertContains(response, 'OpenSSH')
+        self.assertContains(response, 'CUPS')
+        self.assertEqual(TestProject.objects.count(), 1)

@@ -5,17 +5,76 @@ from django.conf import settings
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.contrib import messages
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import TestProject, SecurityScan, TargetAsset, Service, SecurityFinding
+from .forms import NmapImportForm, ProjectForm
 from .parse_nmap import parse_nmap_xml
 from .analysis import DEFENSIVE_RULES, analyze_scan, plain_text
 
 def dashboard_view(request):
-    projects = TestProject.objects.prefetch_related('assets__services').order_by('-created_at')
-    return render(request, 'dashboard.html', {'projects': projects})
+    form = ProjectForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        project = form.save(commit=False)
+        if request.user.is_authenticated:
+            project.owner = request.user
+        project.save()
+        messages.success(request, 'Đã tạo dự án.')
+        return redirect('project_detail', project_id=project.pk)
+    projects = TestProject.objects.order_by('-created_at')
+    return render(request, 'dashboard.html', {'projects': projects, 'form': form},
+                  status=400 if request.method == 'POST' else 200)
+
+
+def project_context(project, import_form=None, tab='functional'):
+    return {'project': project, 'import_form': import_form or NmapImportForm(),
+            'tab': tab, 'test_cases': project.test_cases.all(), 'scans': project.scans.all()}
+
+
+def project_detail(request, project_id):
+    project = get_object_or_404(TestProject, pk=project_id)
+    tab = 'security' if request.GET.get('tab') == 'security' else 'functional'
+    return render(request, 'project_detail.html', project_context(project, tab=tab))
+
+
+@require_POST
+def project_import_nmap(request, project_id):
+    project = get_object_or_404(TestProject, pk=project_id)
+    form = NmapImportForm(request.POST, request.FILES)
+    if form.is_valid():
+        try:
+            scan = import_nmap_file(form.cleaned_data['nmap_file'], project=project)
+        except (ValueError, ValidationError) as exc:
+            form.add_error('nmap_file', str(exc))
+        else:
+            messages.success(request, 'Đã nhập kết quả Nmap.')
+            return redirect('scan_detail', scan_id=scan.pk)
+    messages.error(request, 'Không thể nhập file Nmap. Vui lòng kiểm tra lỗi bên dưới.')
+    return render(request, 'project_detail.html',
+                  project_context(project, form, 'security'), status=400)
+
+
+def scan_detail(request, scan_id):
+    scan = get_object_or_404(SecurityScan.objects.select_related('project'), pk=scan_id)
+    assets = scan.assets.prefetch_related('services__findings')
+    findings_without_service = scan.findings.filter(service__isnull=True).select_related('asset')
+    return render(request, 'scan_detail.html', {
+        'scan': scan, 'assets': assets, 'findings_without_service': findings_without_service,
+    })
+
+
+@require_POST
+def scan_analyze(request, scan_id):
+    scan = get_object_or_404(SecurityScan, pk=scan_id)
+    result = analyze_scan(scan)
+    if result['status'] == SecurityScan.Status.COMPLETED:
+        messages.success(request, 'Đánh giá rủi ro hoàn tất.')
+    else:
+        messages.error(request, f"Trạng thái {result['status']}: {len(result['errors'])} dịch vụ đánh giá lỗi.")
+    return redirect('scan_detail', scan_id=scan.pk)
 
 
 def import_nmap_file(nmap_file, project=None, project_name='Dự án mới'):

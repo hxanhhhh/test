@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Scan #{{ scan.pk }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'project_detail' scan.project_id %}?tab=security">{{ scan.project.name }} / Security</a></p>
+<h1>Scan #{{ scan.pk }} — {{ scan.target }}</h1>
+<p>Trạng thái: {{ scan.status }} · Phương thức: {{ scan.scan_method }}</p>
+<form method="post" action="{% url 'scan_analyze' scan.pk %}">{% csrf_token %}<button>Đánh giá rủi ro bằng AI</button></form>
+{% for asset in assets %}
+<section><h2>{{ asset.ip_address }} {{ asset.hostname|default:'' }}</h2><p>{{ asset.os_info|default:'' }}</p>
+{% for service in asset.services.all %}
+<article><h3>{{ service.port }}/{{ service.protocol }} — {{ service.service_name }}</h3><p>{{ service.product }} {{ service.service_version|default:'' }}</p><p class="text">{{ service.cpe }}</p>
+{% for finding in service.findings.all %}{% include 'finding.html' %}{% empty %}<p>Chưa có kết luận AI.</p>{% endfor %}</article>
+{% empty %}<p>Không có cổng mở trong kết quả này.</p>{% endfor %}
+<h3>Hỏi đáp phòng thủ cho {{ asset.ip_address }}</h3>
+<form class="chat-form" action="{% url 'chat_asset' asset.pk %}">{% csrf_token %}<label>Câu hỏi <input name="message" maxlength="4000" required></label><button>Gửi</button></form>
+<p class="chat-answer text" role="status"></p></section>
+{% empty %}<p>Không có máy mục tiêu.</p>{% endfor %}
+{% for finding in findings_without_service %}{% include 'finding.html' %}{% endfor %}
+<script>
+for (const form of document.querySelectorAll('.chat-form')) {
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const answer = form.nextElementSibling;
+    const button = form.querySelector('button');
+    button.disabled = true;
+    answer.textContent = 'Đang trả lời...';
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': form.elements.csrfmiddlewaretoken.value},
+        body: JSON.stringify({message: form.elements.message.value})
+      });
+      const result = await response.json();
+      answer.textContent = result.reply || result.message || 'Không thể trả lời.';
+    } catch (error) {
+      answer.textContent = 'Không thể kết nối máy chủ.';
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+</script>
+{% endblock %}

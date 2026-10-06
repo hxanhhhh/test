@@ -73,3 +73,13 @@ python manage.py test
 ```
 
 Migration đã được tạo lại theo model BA, dành cho DB mới. Model gồm `TestProject`, `FunctionalTestCase`, `FunctionalTestRun`, `TestStepResult`, `SecurityScan`, `TargetAsset`, `Service` và `SecurityFinding`.
+
+## Sử dụng giao diện
+
+1. Tạo project ở trang chủ, nhập tên, URL, mô tả và phạm vi cho phép (mỗi dòng một host/IP/CIDR).
+2. Tab Functional hiển thị test case đã có hoặc thông báo chưa có test case.
+3. Tab Security cho phép nhập `nmap_sample.xml` vào project hiện tại. Sau import, trình duyệt chuyển đến trang scan với thông báo.
+4. Trang scan hiển thị assets, services và findings. Nhấn **Đánh giá rủi ro bằng AI** để đánh giá các dịch vụ của toàn scan.
+5. Xem severity, confidence, evidence và recommendation; hỏi đáp phòng thủ theo từng máy.
+
+Cấu hình qua biến môi trường `OLLAMA_MODEL`, `OLLAMA_URL`, `CHROMA_PATH` (các giá trị mặc định nằm trong `core/settings.py`). Không cần file `.env`; ứng dụng đọc môi trường của tiến trình.

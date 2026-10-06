@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}Web Testing{% endblock %}</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;color:#202830}nav a{margin-right:1rem}section,article{border:1px solid #d5dce2;padding:1rem;margin:1rem 0}input,textarea{display:block;max-width:100%;width:32rem;padding:.4rem}input[type=file]{width:auto}button{padding:.5rem 1rem;cursor:pointer}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d5dce2;padding:.5rem;text-align:left;vertical-align:top}.errorlist,.error{color:#9e1b1b}.success{color:#196b31}.text{white-space:pre-wrap;overflow-wrap:anywhere}.tabs a{display:inline-block;padding:.7rem}.active{font-weight:bold;background:#e8eef5}dt{font-weight:bold}dd{margin:0 0 1rem}
+</style></head>
+<body><nav><a href="{% url 'dashboard' %}">Dự án kiểm thử</a></nav>
+{% if messages %}<ul role="status">{% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
+{% block content %}{% endblock %}</body></html>

@@ -1,0 +1,9 @@
+<article><h4>{{ finding.title }}</h4><dl>
+<dt>Mức độ nghiêm trọng</dt><dd>{{ finding.get_severity_display }}</dd>
+<dt>Độ tin cậy</dt><dd>{{ finding.get_confidence_display }}</dd>
+<dt>Nhóm</dt><dd>{{ finding.category }}</dd>
+<dt>Bằng chứng</dt><dd class="text">{{ finding.evidence }}</dd>
+<dt>CVE liên quan</dt><dd>{% for cve in finding.related_cve %}{{ cve }}{% if not forloop.last %}, {% endif %}{% empty %}Chưa có{% endfor %}</dd>
+<dt>Mô tả rủi ro</dt><dd class="text">{{ finding.description }}</dd>
+<dt>Khuyến nghị khắc phục</dt><dd class="text">{{ finding.recommendation }}</dd>
+</dl></article>
