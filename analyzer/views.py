@@ -1,7 +1,7 @@
 import json
 
-import chromadb
 import requests
+from django.conf import settings
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
@@ -11,15 +11,7 @@ from django.views.decorators.http import require_POST
 
 from .models import TestProject, SecurityScan, TargetAsset, Service, SecurityFinding
 from .parse_nmap import parse_nmap_xml
-
-CHROMA_PATH = './chroma_data'
-OLLAMA_URL = 'http://localhost:11434/api/generate'
-MODEL_NAME = 'qwen2.5-coder:3b'
-
-
-def get_chroma_client():
-    return chromadb.PersistentClient(path=CHROMA_PATH)
-
+from .analysis import analyze_scan
 
 def dashboard_view(request):
     projects = TestProject.objects.prefetch_related('assets__services').order_by('-created_at')
@@ -78,33 +70,8 @@ def analyze_target_asset(request, asset_id):
     asset = get_object_or_404(TargetAsset, pk=asset_id)
     if asset.scan_id is None:
         return JsonResponse({'status': 'error', 'message': 'Máy chưa gắn với lần quét.'}, status=400)
-    successes = 0
-    errors = []
-    services = list(asset.services.all())
-    for service in services:
-        try:
-            response = requests.post(OLLAMA_URL, json={
-                'model': MODEL_NAME, 'stream': False, 'format': 'json',
-                'prompt': f'Chỉ đánh giá rủi ro và khuyến nghị phòng thủ cho {service}. '
-                          'Không hướng dẫn khai thác, không trả mã thực thi. '
-                          'Trả JSON gồm title, description, recommendation.',
-            }, timeout=60)
-            response.raise_for_status()
-            result = json.loads(response.json()['response'])
-            SecurityFinding.objects.update_or_create(
-                scan=asset.scan, asset=asset, service=service, category='service_review',
-                defaults={'title': result['title'], 'description': result['description'],
-                          'recommendation': result['recommendation']},
-            )
-            successes += 1
-        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-            errors.append({'service_id': service.pk, 'message': str(exc)})
-    scan = asset.scan
-    scan.status = (SecurityScan.Status.COMPLETED if not errors else
-                   SecurityScan.Status.PARTIAL if successes else SecurityScan.Status.FAILED)
-    scan.finished_at = timezone.now()
-    scan.save(update_fields=['status', 'finished_at'])
-    return JsonResponse({'status': scan.status, 'errors': errors}, status=200 if not errors else 502)
+    result = analyze_scan(asset.scan)
+    return JsonResponse(result, status=200 if not result['errors'] else 502)
 
 
 @require_POST
@@ -118,8 +85,8 @@ def chat_with_asset_ai(request, asset_id):
     except (ValueError, AttributeError):
         return JsonResponse({'status': 'error', 'message': 'Câu hỏi không hợp lệ.'}, status=400)
     try:
-        response = requests.post(OLLAMA_URL, json={
-            'model': MODEL_NAME, 'stream': False,
+        response = requests.post(settings.OLLAMA_URL, json={
+            'model': settings.OLLAMA_MODEL, 'stream': False,
             'prompt': f'Chỉ trả lời về rủi ro và khắc phục cho {asset.ip_address}. '
                       f'Không hướng dẫn khai thác hoặc trả mã thực thi. Câu hỏi: {text}',
         }, timeout=60)

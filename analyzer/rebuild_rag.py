@@ -51,9 +51,13 @@ def rebuild_all_collections():
                         sev = item.get("severity", "UNKNOWN")
                         
                         doc = f"CVE-ID: {cve_id}\nSeverity: {sev}\nDescription: {desc}"
+                        metadata = {"cve_id": cve_id, "severity": sev}
+                        for key in ("product", "version", "cpe"):
+                            if isinstance(item.get(key), str) and item[key]:
+                                metadata[key] = item[key]
                         active_cols["collection_cve"].upsert(
                             documents=[doc],
-                            metadatas=[{"cve_id": cve_id, "severity": sev}],
+                            metadatas=[metadata],
                             ids=[cve_id]
                         )
                         cve_count += 1
