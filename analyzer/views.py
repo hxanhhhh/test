@@ -3,6 +3,7 @@ import json
 import chromadb
 import requests
 from django.db import transaction
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -25,33 +26,51 @@ def dashboard_view(request):
     return render(request, 'dashboard.html', {'projects': projects})
 
 
+def import_nmap_file(nmap_file, project=None, project_name='Dự án mới'):
+    hosts = parse_nmap_xml(nmap_file)
+    target = ', '.join(host['ip'] for host in hosts)
+    if len(target) > 255:
+        raise ValueError('Danh sách IP vượt giới hạn 255 ký tự của mục tiêu scan.')
+    with transaction.atomic():
+        if project is None:
+            project = TestProject(name=project_name)
+            project.full_clean()
+            project.save()
+        scan = SecurityScan.objects.create(
+            project=project, target=target, scan_method='nmap-import',
+            status=SecurityScan.Status.COMPLETED,
+            started_at=timezone.now(), finished_at=timezone.now(),
+        )
+        for host in hosts:
+            asset = TargetAsset(
+                project=project, scan=scan, ip_address=host['ip'],
+                hostname=host['hostname'], os_info=host['os'],
+            )
+            asset.full_clean()
+            asset.save()
+            for data in host['services']:
+                service = Service(
+                    asset=asset, port=data['port'], protocol=data['protocol'],
+                    service_name=data['name'], product=data['product'],
+                    service_version=data['version'], cpe=data['cpe'],
+                )
+                service.full_clean()
+                service.save()
+    return scan
+
+
 @require_POST
 def upload_nmap_log(request):
     nmap_file = request.FILES.get('nmap_file')
     if not nmap_file:
         return JsonResponse({'status': 'error', 'message': 'Vui lòng chọn file XML Nmap.'}, status=400)
+    project_id = request.POST.get('project_id')
+    project = get_object_or_404(TestProject, pk=project_id) if project_id else None
     try:
-        hosts = parse_nmap_xml(nmap_file)
-    except ValueError as exc:
+        scan = import_nmap_file(nmap_file, project, request.POST.get('project_name', 'Dự án mới'))
+    except (ValueError, ValidationError) as exc:
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
-    with transaction.atomic():
-        project = TestProject.objects.create(name=request.POST.get('project_name', 'Dự án mới'))
-        scan = SecurityScan.objects.create(
-            project=project, target=', '.join(h['ip'] for h in hosts),
-            scan_method='nmap-import', status=SecurityScan.Status.COMPLETED,
-            started_at=timezone.now(), finished_at=timezone.now(),
-        )
-        for host in hosts:
-            asset = TargetAsset.objects.create(
-                project=project, scan=scan, ip_address=host['ip'],
-                hostname=host['hostname'], os_info=host['os'],
-            )
-            for service in host['services']:
-                Service.objects.create(
-                    asset=asset, port=service['port'], protocol=service['protocol'],
-                    service_name=service['name'], service_version=service['version'],
-                )
-    return JsonResponse({'status': 'success', 'project_id': project.pk, 'scan_id': scan.pk})
+    return JsonResponse({'status': 'success', 'project_id': scan.project_id, 'scan_id': scan.pk})
 
 
 @require_POST
