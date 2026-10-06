@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from ipaddress import ip_address
 
 def parse_nmap_xml(nmap_file):
     """
@@ -10,6 +11,8 @@ def parse_nmap_xml(nmap_file):
         # ElementTree có thể parse trực tiếp file-like object từ Django request.FILES
         tree = ET.parse(nmap_file)
         root = tree.getroot()
+        if root.tag != "nmaprun":
+            raise ValueError("File XML không phải kết quả quét Nmap (thiếu nmaprun).")
         
         for host in root.findall('host'):
             # Kiểm tra trạng thái máy (Up/Down)
@@ -25,6 +28,13 @@ def parse_nmap_xml(nmap_file):
             elif host.find('address') is not None:
                 ip_addr = host.find('address').get('addr', '0.0.0.0')
                 
+            try:
+                ip_address(ip_addr)
+            except ValueError as exc:
+                raise ValueError("Địa chỉ IP của máy mục tiêu không hợp lệ.") from exc
+            if host.find("address") is None:
+                raise ValueError("Máy mục tiêu thiếu địa chỉ IP.")
+
             # Lấy Hostname
             hostname = ""
             hostnames = host.find('hostnames')
@@ -46,7 +56,12 @@ def parse_nmap_xml(nmap_file):
                 for port in ports.findall('port'):
                     state = port.find('state')
                     if state is not None and state.get('state') == 'open':
-                        port_id = int(port.get('portid', 0))
+                        try:
+                            port_id = int(port.get('portid', ''))
+                        except ValueError as exc:
+                            raise ValueError("Số cổng trong XML Nmap không hợp lệ.") from exc
+                        if not 0 <= port_id <= 65535:
+                            raise ValueError("Số cổng phải nằm trong khoảng 0–65535.")
                         service_elem = port.find('service')
                         
                         service_name = "unknown"
@@ -73,7 +88,9 @@ def parse_nmap_xml(nmap_file):
                 'services': services
             })
             
-    except Exception as e:
-        print(f"❌ Lỗi trong quá trình parse Nmap XML: {e}")
+    except ET.ParseError as exc:
+        raise ValueError("File XML không hợp lệ hoặc bị hỏng.") from exc
         
+    if not hosts_data:
+        raise ValueError("File Nmap XML không chứa máy mục tiêu đang hoạt động.")
     return hosts_data

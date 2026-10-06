@@ -5,6 +5,7 @@ import chromadb
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
+from django.db import transaction
 from .models import SecurityProject, TargetAsset, ExploitSuggestion
 from .parse_nmap import parse_nmap_xml
 
@@ -26,30 +27,35 @@ def upload_nmap_log(request):
     if request.method == "POST" and request.FILES.get('nmap_file'):
         project_name = request.POST.get('project_name', 'Dự án Đánh giá Mới')
         nmap_file = request.FILES['nmap_file']
-        
-        project = SecurityProject.objects.create(name=project_name)
-        parsed_hosts = parse_nmap_xml(nmap_file)
-        
-        for host in parsed_hosts:
-            asset = TargetAsset.objects.create(
-                project=project,
-                ip_address=host.get('ip', '0.0.0.0'),
-                hostname=host.get('hostname', ''),
-                os_info=host.get('os', 'Unknown OS')
-            )
-            
-            for service in host.get('services', []):
-                ExploitSuggestion.objects.create(
-                    asset=asset,
-                    port=service.get('port', 0),
-                    service_name=service.get('name', 'unknown'),
-                    service_version=service.get('version', ''),
-                    attack_path_summary="Chưa phân tích (Nhấn nút để kích hoạt AI RAG)",
-                    suggested_poc_code="# Chưa sinh mã PoC"
+
+        try:
+            parsed_hosts = parse_nmap_xml(nmap_file)
+        except ValueError as exc:
+            return JsonResponse({"status": "error", "message": str(exc)}, status=400)
+
+        with transaction.atomic():
+            project = SecurityProject.objects.create(name=project_name)
+
+            for host in parsed_hosts:
+                asset = TargetAsset.objects.create(
+                    project=project,
+                    ip_address=host.get('ip', '0.0.0.0'),
+                    hostname=host.get('hostname', ''),
+                    os_info=host.get('os', 'Unknown OS')
                 )
-                
+
+                for service in host.get('services', []):
+                    ExploitSuggestion.objects.create(
+                        asset=asset,
+                        port=service.get('port', 0),
+                        service_name=service.get('name', 'unknown'),
+                        service_version=service.get('version', ''),
+                        attack_path_summary="Chưa phân tích (Nhấn nút để kích hoạt AI RAG)",
+                        suggested_poc_code="# Chưa sinh mã PoC"
+                    )
+
         return JsonResponse({'status': 'success', 'project_id': project.id})
-    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+    return JsonResponse({'status': 'error', 'message': 'Vui lòng gửi file XML Nmap bằng phương thức POST.'}, status=400)
 
 
 @csrf_exempt
@@ -59,61 +65,17 @@ def chat_with_asset_ai(request, asset_id):
         try:
             data = json.loads(request.body)
             user_message = data.get("message", "")
-            
+
             asset = get_object_or_404(TargetAsset, id=asset_id)
             vulns = asset.vulnerabilities.all()
-            
+
             # Gom ngữ cảnh về IP này để Chatbot nắm rõ bối cảnh
             vuln_context = []
             for v in vulns:
                 vuln_context.append(f"- Port {v.port} ({v.service_name} {v.service_version}): CVE={v.cve_references}")
-            
+
             context_str = "\n".join(vuln_context)
-            
-            system_prompt = f"""
-            Bạn là Chuyên gia An ninh mạng / Pentest AI thuộc hệ thống.
-            Dưới đây là thông tin máy mục tiêu người dùng đang thảo luận:
-            - Target IP: {asset.ip_address}
-            - Dịch vụ/Cổng mở:
-            {context_str}
 
-            Hãy trả lời câu hỏi của người dùng ngắn gọn, chính xác, chuyên nghiệp và mang tính kỹ thuật an ninh mạng.
-            """
-
-            full_prompt = f"{system_prompt}\n\nNgười dùng hỏi: {user_message}\nAI trả lời:"
-
-            res = requests.post(OLLAMA_URL, json={
-                "model": MODEL_NAME,
-                "prompt": full_prompt,
-                "stream": False
-            }, timeout=60)
-
-            if res.status_code == 200:
-                reply = res.json().get("response", "Không thể phản hồi.")
-                return JsonResponse({"status": "success", "reply": reply})
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=500)
-
-    return JsonResponse({"status": "error", "message": "Method not allowed"}, status=405)
-
-@csrf_exempt
-def chat_with_asset_ai(request, asset_id):
-    """API Chatbot trao đổi trực tiếp với AI dựa trên ngữ cảnh của Asset"""
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            user_message = data.get("message", "")
-            
-            asset = get_object_or_404(TargetAsset, id=asset_id)
-            vulns = asset.vulnerabilities.all()
-            
-            # Gom ngữ cảnh về IP này để Chatbot nắm rõ bối cảnh
-            vuln_context = []
-            for v in vulns:
-                vuln_context.append(f"- Port {v.port} ({v.service_name} {v.service_version}): CVE={v.cve_references}")
-            
-            context_str = "\n".join(vuln_context)
-            
             system_prompt = f"""
             Bạn là Chuyên gia An ninh mạng / Pentest AI thuộc hệ thống.
             Dưới đây là thông tin máy mục tiêu người dùng đang thảo luận:
@@ -145,11 +107,11 @@ def analyze_target_asset(request, asset_id):
     asset = get_object_or_404(TargetAsset, id=asset_id)
     vulnerabilities = asset.vulnerabilities.all()
     client = get_chroma_client()
-    
+
     for vuln in vulnerabilities:
         service_kw = f"{vuln.service_name} {vuln.service_version}".strip()
         context_list = []
-        
+
         # 1. Query CVE
         try:
             col_cve = client.get_collection("collection_cve")
@@ -157,7 +119,7 @@ def analyze_target_asset(request, asset_id):
             if cve_res['documents'] and cve_res['documents'][0]:
                 context_list.append("=== DỮ LIỆU CVE NVD ===\n" + cve_res['documents'][0][0])
         except Exception: pass
-            
+
         # 2. Query PoC / Exploit
         try:
             col_poc = client.get_collection("collection_exploit_poc")
@@ -167,7 +129,7 @@ def analyze_target_asset(request, asset_id):
         except Exception: pass
 
         context_str = "\n\n".join(context_list)
-        
+
         # 3. Prompt gửi AI Ollama
         prompt = f"""
         Bạn là một chuyên gia Pentest an ninh mạng. Hãy phân tích dịch vụ mục tiêu dưới đây:
@@ -185,7 +147,7 @@ def analyze_target_asset(request, asset_id):
             "cve": "Mã CVE liên quan nếu có"
         }}
         """
-        
+
         try:
             res = requests.post(OLLAMA_URL, json={
                 "model": MODEL_NAME,
@@ -193,7 +155,7 @@ def analyze_target_asset(request, asset_id):
                 "stream": False,
                 "format": "json"
             }, timeout=60)
-            
+
             if res.status_code == 200:
                 ai_output = json.loads(res.json().get('response', '{}'))
                 vuln.attack_path_summary = ai_output.get('attack_path', 'Không thể xây dựng chuỗi tấn công.')
@@ -203,13 +165,13 @@ def analyze_target_asset(request, asset_id):
         except Exception as e:
             vuln.attack_path_summary = f"Lỗi kết nối AI: {str(e)}"
             vuln.save()
-            
+
     return JsonResponse({'status': 'completed', 'asset_id': asset.id})
 def get_asset_detail(request, asset_id):
     """API trả về JSON thông tin chi tiết dịch vụ và mã PoC của một IP"""
     asset = get_object_or_404(TargetAsset, id=asset_id)
     vulns = asset.vulnerabilities.all()
-    
+
     vuln_list = []
     for v in vulns:
         vuln_list.append({
@@ -220,7 +182,7 @@ def get_asset_detail(request, asset_id):
             'poc_code': v.suggested_poc_code,
             'cve': v.cve_references
         })
-        
+
     return JsonResponse({
         'ip': asset.ip_address,
         'vulnerabilities': vuln_list
