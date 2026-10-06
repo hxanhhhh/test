@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 
 from .models import TestProject, SecurityScan, TargetAsset, Service, SecurityFinding
 from .parse_nmap import parse_nmap_xml
-from .analysis import analyze_scan
+from .analysis import DEFENSIVE_RULES, analyze_scan, plain_text
 
 def dashboard_view(request):
     projects = TestProject.objects.prefetch_related('assets__services').order_by('-created_at')
@@ -76,24 +76,42 @@ def analyze_target_asset(request, asset_id):
 
 @require_POST
 def chat_with_asset_ai(request, asset_id):
-    asset = get_object_or_404(TargetAsset, pk=asset_id)
+    asset = get_object_or_404(TargetAsset.objects.prefetch_related('services', 'findings'), pk=asset_id)
     try:
         data = json.loads(request.body)
-        text = data.get('message', '').strip()
-        if not text:
-            raise ValueError('Vui lòng nhập câu hỏi.')
-    except (ValueError, AttributeError):
+        if not isinstance(data, dict):
+            raise ValueError
+        text = data.get('message')
+        if not isinstance(text, str) or not text.strip() or len(text) > 4000:
+            raise ValueError
+    except (ValueError, TypeError):
         return JsonResponse({'status': 'error', 'message': 'Câu hỏi không hợp lệ.'}, status=400)
+    context = {
+        'ip': asset.ip_address,
+        'services': list(asset.services.values('port', 'protocol', 'service_name',
+                                               'product', 'service_version', 'cpe')),
+        'findings': list(asset.findings.values('title', 'severity', 'confidence',
+                                               'evidence', 'related_cve',
+                                               'description', 'recommendation')),
+        'question': text.strip(),
+    }
+    prompt = (DEFENSIVE_RULES + '\nHỏi đáp chỉ dựa trên máy được chọn. '
+              'Trả JSON duy nhất có trường reply là văn bản giải thích rủi ro hoặc khắc phục.\n'
+              + json.dumps(context, ensure_ascii=False))
     try:
         response = requests.post(settings.OLLAMA_URL, json={
-            'model': settings.OLLAMA_MODEL, 'stream': False,
-            'prompt': f'Chỉ trả lời về rủi ro và khắc phục cho {asset.ip_address}. '
-                      f'Không hướng dẫn khai thác hoặc trả mã thực thi. Câu hỏi: {text}',
+            'model': settings.OLLAMA_MODEL, 'stream': False, 'format': 'json', 'prompt': prompt,
         }, timeout=60)
         response.raise_for_status()
-        return JsonResponse({'status': 'success', 'reply': response.json()['response']})
-    except (requests.RequestException, ValueError, KeyError) as exc:
-        return JsonResponse({'status': 'error', 'message': str(exc)}, status=502)
+        result = json.loads(response.json()['response'])
+        if not isinstance(result, dict) or set(result) != {'reply'}:
+            raise ValueError
+        reply = plain_text(result['reply'])
+        if not reply:
+            raise ValueError
+        return JsonResponse({'status': 'success', 'reply': reply})
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Không thể trả lời câu hỏi lúc này.'}, status=502)
 
 
 def get_asset_detail(request, asset_id):

@@ -80,3 +80,25 @@ class AnalysisStatusTests(TestCase):
                 self.assertEqual(result['status'], expected)
                 self.assertEqual(self.scan.status, expected)
                 self.assertEqual(SecurityFinding.objects.count(), count)
+
+
+class ChatTests(AnalysisStatusTests):
+    @patch('analyzer.views.requests.post')
+    def test_chat_includes_services_and_findings(self, post):
+        import json
+        from .models import SecurityFinding
+        asset = self.scan.assets.get()
+        SecurityFinding.objects.create(
+            scan=self.scan, asset=asset, service=asset.services.get(port=22),
+            title='Review SSH support', recommendation='Apply vendor updates',
+        )
+        post.return_value.json.return_value = {'response': json.dumps({'reply': 'Apply vendor updates.'})}
+        response = self.client.post(f'/api/chat-asset/{asset.pk}/',
+                                    data=json.dumps({'message': 'What should I update?'}),
+                                    content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['reply'], 'Apply vendor updates.')
+        prompt = post.call_args.kwargs['json']['prompt']
+        self.assertIn('OpenSSH', prompt)
+        self.assertIn('Review SSH support', prompt)
+        self.assertIn('Không hướng dẫn khai thác', prompt)
