@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Báo cáo Kiểm thử Web Tự động</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; color: #1f2733; margin: 0; padding: 32px; }
+  h1, h2, h3 { color: #10223f; margin: 0 0 .4em; }
+  .cover { text-align: center; padding: 48px 0 24px; border-bottom: 3px solid #10223f; margin-bottom: 24px; }
+  .cover .sub { color: #5b6677; font-size: 15px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; color: #fff; }
+  .pass, .low, .info { background: #1f8a4c; }
+  .fail, .high, .critical { background: #c0392b; }
+  .medium { background: #d98a1f; }
+  .meta { color: #5b6677; font-size: 13px; }
+  section { margin: 28px 0; page-break-inside: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #d5dce2; padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card { border: 1px solid #d5dce2; border-radius: 6px; padding: 10px; page-break-inside: avoid; }
+  .card img { width: 100%; border: 1px solid #e0e6ec; border-radius: 4px; margin-top: 6px; }
+  .kpi { display: inline-block; min-width: 150px; background: #f3f6fa; border: 1px solid #dce3ec;
+         border-radius: 8px; padding: 10px 14px; margin: 4px 6px 4px 0; }
+  .kpi b { font-size: 22px; display: block; color: #10223f; }
+  .muted { color: #5b6677; }
+  code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>BÁO CÁO KIỂM THỬ WEB TỰ ĐỘNG BẰNG AI AGENT &amp; MCP</h1>
+  <div class="sub">Đồ án Tốt nghiệp — Ngành An toàn thông tin — PTIT</div>
+  <div class="meta">Tạo lúc: {{ generated_at }} · Model LLM: <code>{{ model }}</code></div>
+</div>
+
+<section>
+  <h2>1. Tổng quan</h2>
+  <div class="kpi"><b>{{ summary.func_total }}</b><span class="muted">Lần chạy chức năng</span></div>
+  <div class="kpi"><b>{{ summary.func_pass }}</b><span class="muted">Đạt (PASS)</span></div>
+  <div class="kpi"><b>{{ summary.sec_findings }}</b><span class="muted">Phát hiện bảo mật</span></div>
+  {% if benchmark %}
+  <div class="kpi"><b>{{ benchmark.tong_hop.functional.do_chinh_xac }}</b><span class="muted">Độ chính xác agent</span></div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>2. Kết quả Kiểm thử Chức năng</h2>
+  {% for run in functional_runs %}
+  <h3>{{ forloop.counter }}. {{ run.name }}
+      <span class="badge {% if run.status == 'PASS' %}pass{% else %}fail{% endif %}">{{ run.status }}</span></h3>
+  <div class="meta">Dự án: {{ run.project }} · Model: <code>{{ run.model_name }}</code> · Bắt đầu: {{ run.started }}</div>
+  <div class="cards">
+    {% for s in run.steps %}
+    <div class="card">
+      <strong>Bước {{ s.step_no }}: {{ s.action }}</strong>
+      <span class="badge {% if s.status == 'PASS' %}pass{% else %}fail{% endif %}">{{ s.status }}</span>
+      {% if s.duration_ms %}<span class="muted"> · {{ s.duration_ms }} ms</span>{% endif %}
+      <div class="muted">{{ s.detail }}</div>
+      {% if s.image %}<img src="{{ s.image }}" alt="evidence">{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% empty %}
+  <p class="muted">Chưa có lần chạy chức năng nào trong CSDL.</p>
+  {% endfor %}
+</section>
+
+<section>
+  <h2>3. Kết quả Trinh sát &amp; Bảo mật</h2>
+  {% if security %}
+  <div class="meta">Mục tiêu: {{ security.target }} · Lúc: {{ security.created }}</div>
+  <table>
+    <thead><tr><th>Tiêu đề</th><th>Mức độ</th><th>Độ tin cậy</th><th>CVE</th><th>Khuyến nghị</th></tr></thead>
+    <tbody>
+      {% for f in security.findings %}
+      <tr>
+        <td>{{ f.title }}<div class="muted">{{ f.description }}</div></td>
+        <td><span class="badge {{ f.severity }}">{{ f.severity }}</span></td>
+        <td>{{ f.confidence }}</td>
+        <td>{{ f.related_cve|join:", " }}</td>
+        <td>{{ f.recommendation }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="muted">Chưa có phát hiện nào (chạy "Đánh giá rủi ro bằng AI").</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Chưa có lần quét bảo mật nào trong CSDL.</p>
+  {% endif %}
+</section>
+
+{% if benchmark %}
+<section>
+  <h2>4. Số liệu Đo đạc (Benchmark trên lab)</h2>
+  <div class="meta">Thời điểm: {{ benchmark.thoi_diem }} · Model: <code>{{ benchmark.model }}</code></div>
+  <table>
+    <thead><tr><th>Kịch bản</th><th>Kỳ vọng</th><th>Kết quả</th><th>Đúng?</th><th>Số bước</th><th>Thời gian (s)</th></tr></thead>
+    <tbody>
+      {% for r in benchmark.chuc_nang %}
+      <tr>
+        <td>{{ r.name }}</td><td>{{ r.expect }}</td>
+        <td><span class="badge {% if r.status == 'PASS' %}pass{% else %}fail{% endif %}">{{ r.status }}</span></td>
+        <td>{% if r.correct %}Đúng{% else %}Sai{% endif %}</td>
+        <td>{{ r.steps }}</td><td>{{ r.duration_sec }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Độ chính xác chức năng: <b>{{ benchmark.tong_hop.functional.do_chinh_xac }}</b> ·
+     TB số bước: {{ benchmark.tong_hop.functional.tb_so_buoc }} ·
+     TB thời gian: {{ benchmark.tong_hop.functional.tb_thoi_gian_sec }} s</p>
+</section>
+{% endif %}
+
+<section>
+  <p class="muted" style="font-size:12px">Báo cáo sinh tự động. Các kết luận bảo mật dựa trên dữ liệu quan sát được, mang tính phòng thủ; khớp phiên bản không đồng nghĩa đã xác nhận lỗ hổng.</p>
+</section>
+
+</body>
+</html>

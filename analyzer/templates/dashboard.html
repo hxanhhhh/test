@@ -1,7 +1,301 @@
-{% extends 'base.html' %}
-{% block content %}
-<h1>Dự án kiểm thử web</h1>
-<section><h2>Tạo dự án</h2><form method="post">{% csrf_token %}{{ form.as_p }}<button>Tạo dự án</button></form></section>
-<h2>Danh sách dự án</h2>
-<ul>{% for project in projects %}<li><a href="{% url 'project_detail' project.pk %}">{{ project.name }}</a> — {{ project.target_url }}</li>{% empty %}<li>Chưa có dự án.</li>{% endfor %}</ul>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Kiểm thử Web Tự động hóa bằng AI Agent & MCP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-dark mb-4 shadow-sm py-3">
+    <div class="container-fluid px-4">
+        <span class="navbar-brand mb-0 h1 fs-5 fw-bold">
+            <i class="bi bi-shield-check text-primary me-2"></i> HỆ THỐNG KIỂM THỬ WEB TỰ ĐỘNG BẰNG AI AGENT & MCP
+        </span>
+        <span class="badge bg-success px-3 py-2 fs-6">Đồ án Tốt nghiệp - PTIT</span>
+    </div>
+</nav>
+
+<div class="container pb-5">
+
+    {% if messages %}
+    <div class="mb-3">
+        {% for message in messages %}
+        {% if message.tags == 'error' %}
+        <div class="alert alert-danger py-2 mb-2">{{ message }}</div>
+        {% else %}
+        <div class="alert alert-{{ message.tags|default:'info' }} py-2 mb-2">{{ message }}</div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- THANH CHUYỂN TAB -->
+    <div class="card p-2 shadow-sm mb-4 border-0">
+        <ul class="nav nav-pills nav-fill" id="pills-tab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'project' %}active{% endif %} fw-bold py-3 fs-6" data-bs-toggle="pill" data-bs-target="#pills-project" type="button" role="tab">
+                    <i class="bi bi-folder2-open me-2"></i> 0. QUẢN LÝ DỰ ÁN
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'functional' %}active{% endif %} fw-bold py-3 fs-6" data-bs-toggle="pill" data-bs-target="#pills-func" type="button" role="tab">
+                    <i class="bi bi-window-stack me-2"></i> 1. KIỂM THỬ CHỨC NĂNG (Browser MCP)
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'security' %}active{% endif %} fw-bold py-3 fs-6" data-bs-toggle="pill" data-bs-target="#pills-sec" type="button" role="tab">
+                    <i class="bi bi-shield-exclamation me-2"></i> 2. TRINH SÁT & BẢO MẬT (CVE RAG)
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <div class="tab-content" id="pills-tabContent">
+
+        <!-- ================= TAB 0: QUẢN LÝ DỰ ÁN ================= -->
+        <div class="tab-pane fade {% if active_tab == 'project' %}show active{% endif %}" id="pills-project" role="tabpanel">
+            <div class="row">
+                <div class="col-lg-5 mb-4">
+                    <div class="card shadow-sm border-0 p-4 h-100">
+                        <h5 class="card-title text-primary fw-bold mb-3"><i class="bi bi-plus-square me-2"></i> Tạo dự án kiểm thử</h5>
+                        <form method="post">
+                            {% csrf_token %}
+                            {{ form.as_p }}
+                            <button type="submit" class="btn btn-primary fw-bold mt-2"><i class="bi bi-save me-1"></i> Tạo dự án</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="col-lg-7 mb-4">
+                    <div class="card shadow-sm border-0 p-4 h-100">
+                        <h5 class="card-title text-dark fw-bold mb-3"><i class="bi bi-list-ul me-2"></i> Danh sách dự án</h5>
+                        <ul class="list-group list-group-flush">
+                            {% for project in projects %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <a href="{% url 'project_detail' project.pk %}" class="fw-semibold text-decoration-none">{{ project.name }}</a>
+                                <span class="text-muted small">{{ project.target_url }}</span>
+                            </li>
+                            {% empty %}
+                            <li class="list-group-item text-muted">Chưa có dự án nào.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 1: KIỂM THỬ CHỨC NĂNG ================= -->
+        <div class="tab-pane fade {% if active_tab == 'functional' %}show active{% endif %}" id="pills-func" role="tabpanel">
+
+            <!-- Chế độ B: Agent tự động (MCP) — CHÍNH, có ô nhập riêng -->
+            <div class="card shadow border-primary border-2 p-4 mb-4 bg-white">
+                <h5 class="card-title text-primary fw-bold mb-2"><i class="bi bi-robot me-2"></i> Chế độ B — Agent tự động (Browser MCP) · KHUYẾN NGHỊ</h5>
+                <p class="text-muted small mb-3">Tác tử LLM tự quan sát trang rồi <strong>click/fill/get_text</strong> theo mục tiêu — <strong>đăng nhập, điền form nhiều bước</strong> đều được. Kết luận PASS/FAIL được kiểm chứng bằng nội dung thật trên trang, có giới hạn scope theo host.</p>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="run_agent">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Target URL:</label>
+                        <input type="text" name="target_url" class="form-control form-control-lg fs-6" value="{{ target_url|default:'http://127.0.0.1:4280/login.php' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mục tiêu (mô tả tự nhiên):</label>
+                        <textarea name="user_requirement" class="form-control" rows="2" required>{{ user_requirement|default:'Điền admin vào ô Username, password vào ô Password, bấm Login; xác nhận đăng nhập thành công khi trang có chữ Logout' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg fw-bold"><i class="bi bi-lightning-charge-fill me-2"></i> Chạy Agent tự động</button>
+                </form>
+                {% if agent_mode %}
+                <div class="alert alert-{% if agent_status == 'PASS' %}success{% else %}danger{% endif %} mt-3 mb-0 py-2">
+                    <i class="bi bi-flag-fill me-1"></i> Kết luận của Agent: <strong>{{ agent_status }}</strong>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Chế độ A: kịch bản tĩnh — PHỤ, ẩn mặc định để tránh bấm nhầm -->
+            <details class="mb-4" {% if test_cases %}open{% endif %}>
+            <summary class="text-secondary fw-semibold py-2" style="cursor:pointer"><i class="bi bi-gear me-1"></i> Chế độ A — kịch bản tĩnh (nâng cao, KHÔNG đăng nhập) — bấm để mở</summary>
+            <div class="card shadow-sm border-0 p-4 mb-4 mt-2">
+                <h5 class="card-title text-secondary fw-bold mb-2"><i class="bi bi-input-cursor-text me-2"></i> Chế độ A — Kịch bản tĩnh (navigate + check_title)</h5>
+                <div class="alert alert-warning py-2 small mb-3"><i class="bi bi-exclamation-triangle me-1"></i> Chế độ này <strong>KHÔNG đăng nhập / điền form</strong> được — chỉ mở trang và so tiêu đề. Muốn đăng nhập hãy dùng <strong>Chế độ B</strong> ở trên.</div>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="generate_functional">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Target URL:</label>
+                        <input type="text" name="target_url" class="form-control fs-6" value="{{ target_url|default:'http://127.0.0.1:4280/login.php' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mô tả (chỉ sinh navigate + check_title):</label>
+                        <textarea name="user_requirement" class="form-control" rows="2" required>{{ user_requirement|default:'Xác thực tiêu đề trang có chứa DVWA' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-outline-secondary fw-bold"><i class="bi bi-cpu-fill me-2"></i> Yêu cầu AI Sinh Kịch bản (Chế độ A)</button>
+                </form>
+            </div>
+
+            {% if test_cases %}
+            <div class="card shadow-sm border-warning p-4 mb-4 bg-white">
+                <h5 class="card-title text-warning-emphasis fw-bold mb-3"><i class="bi bi-list-check me-2"></i> Bước 2: Xem lại & Xác nhận Kịch bản AI (Human-in-the-Loop)</h5>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="run_functional">
+                    <input type="hidden" name="target_url" value="{{ target_url }}">
+                    <input type="hidden" name="user_requirement" value="{{ user_requirement }}">
+                    <input type="hidden" name="selected_cases" value="{{ test_cases|safe }}">
+                    <div class="table-responsive mb-3">
+                        <table class="table table-hover table-bordered align-middle">
+                            <thead class="table-dark">
+                                <tr><th style="width:10%;">Bước</th><th style="width:20%;">Hành động</th><th style="width:35%;">Giá trị</th><th style="width:35%;">Kỳ vọng</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for tc in test_cases %}
+                                <tr>
+                                    <td class="fw-bold text-center">{{ tc.step_id }}</td>
+                                    <td><span class="badge bg-info text-dark px-2 py-1 fs-6">{{ tc.action }}</span></td>
+                                    <td><code>{{ tc.value }}</code></td>
+                                    <td>{{ tc.expected }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-lg fs-6 fw-bold"><i class="bi bi-play-btn-fill me-2"></i> Chạy kịch bản tĩnh (navigate + check_title)</button>
+                </form>
+            </div>
+            {% endif %}
+            </details>
+
+            {% if func_results %}
+            <div class="card shadow-sm border-0 p-4 bg-white">
+                <h5 class="card-title text-success fw-bold mb-3"><i class="bi bi-journal-check me-2"></i> Bước 3: Kết quả Thực thi & Bằng chứng</h5>
+                <hr>
+                {% if saved_run_id %}
+                <div class="alert alert-info py-2 mb-3"><i class="bi bi-database-check me-1"></i> Đã lưu lần chạy vào CSDL Django (Run #{{ saved_run_id }}). Xem chi tiết tại <code>/admin/</code>.</div>
+                {% endif %}
+                {% if save_error %}
+                <div class="alert alert-warning py-2 mb-3"><i class="bi bi-exclamation-triangle me-1"></i> Không lưu được vào CSDL: {{ save_error }}</div>
+                {% endif %}
+                <div class="row">
+                    {% for res in func_results %}
+                    <div class="col-md-6 mb-4">
+                        <div class="card border-{% if res.status == 'PASS' %}success{% else %}danger{% endif %} h-100 shadow-sm">
+                            <div class="card-header bg-{% if res.status == 'PASS' %}success{% else %}danger{% endif %} text-white d-flex justify-content-between align-items-center fw-bold">
+                                <span>Bước {{ res.step_id }}: {{ res.action }}</span>
+                                <span class="badge bg-white text-{% if res.status == 'PASS' %}success{% else %}danger{% endif %} fs-6">{{ res.status }}</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text mb-2"><strong>Thực tế:</strong> {{ res.detail }}</p>
+                                <p class="card-text text-muted mb-3"><small><strong>Kỳ vọng:</strong> {{ res.expected }}</small></p>
+                                {% if res.evidence %}
+                                <div class="mt-2 border-top pt-2">
+                                    <small class="fw-bold text-secondary d-block mb-1"><i class="bi bi-camera me-1"></i> Ảnh bằng chứng:</small>
+                                    <img src="/{{ res.evidence }}" class="img-fluid rounded border shadow-sm" alt="Ảnh bằng chứng">
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ================= TAB 2: TRINH SÁT & BẢO MẬT ================= -->
+        <div class="tab-pane fade {% if active_tab == 'security' %}show active{% endif %}" id="pills-sec" role="tabpanel">
+            <div class="card shadow-sm border-0 p-4 mb-4">
+                <h5 class="card-title text-danger fw-bold mb-2"><i class="bi bi-search me-2"></i> Trinh sát THỤ ĐỘNG (chỉ đọc)</h5>
+                <p class="text-muted small mb-3">Kiểm tra header bảo mật, cookie flags, TLS, robots.txt — không gửi payload tấn công. Dùng được cho site bất kỳ.</p>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="run_security">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Địa chỉ Website cần quét bảo mật:</label>
+                        <input type="text" name="target_url" class="form-control form-control-lg fs-6" value="{{ target_url|default:'http://127.0.0.1:8000' }}" placeholder="https://example.com" required>
+                    </div>
+                    <button type="submit" class="btn btn-danger btn-lg fs-6 fw-bold"><i class="bi bi-shield-shaded me-2"></i> Chạy Trinh sát Thụ động</button>
+                </form>
+            </div>
+
+            <!-- Quét CHỦ ĐỘNG trong lab (XSS/SQLi) -->
+            <div class="card shadow-sm border-danger border-2 p-4 mb-4 bg-white">
+                <h5 class="card-title text-danger fw-bold mb-2"><i class="bi bi-bug me-2"></i> Quét CHỦ ĐỘNG trong lab (XSS / SQLi)</h5>
+                <div class="alert alert-warning py-2 small mb-3"><i class="bi bi-shield-lock me-1"></i> Chỉ dùng với mục tiêu <strong>lab nội bộ bạn được phép</strong> (localhost / IP private). Payload benign, chỉ phát hiện dấu hiệu, không khai thác; mục tiêu công khai sẽ bị từ chối.</div>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="run_active_scan">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">URL có tham số (vd Juice Shop search):</label>
+                        <input type="text" name="scan_url" class="form-control fs-6" value="{{ scan_url }}" required>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="confirm_authorized" id="confirmAuth">
+                        <label class="form-check-label small" for="confirmAuth">Tôi xác nhận được phép kiểm thử mục tiêu lab này.</label>
+                    </div>
+                    <button type="submit" class="btn btn-outline-danger fw-bold"><i class="bi bi-crosshair me-1"></i> Quét chủ động</button>
+                </form>
+            </div>
+
+            <!-- Quét CÓ ĐĂNG NHẬP: Agent login -> dùng phiên để quét vùng cần auth -->
+            <div class="card shadow-sm border-dark p-4 mb-4 bg-white">
+                <h5 class="card-title fw-bold mb-2"><i class="bi bi-key me-2"></i> Kiểm thử bảo mật SAU ĐĂNG NHẬP (prompt)</h5>
+                <div class="alert alert-info py-2 small mb-3"><i class="bi bi-info-circle me-1"></i> Agent <strong>đăng nhập</strong>, rồi <strong>tự điều hướng theo prompt</strong> của bạn tới vùng cần test, sau đó <strong>tự dò tham số form trên trang đó và quét XSS/SQLi</strong> bằng chính phiên đăng nhập. Chỉ host nội bộ. (DVWA cần Security = <em>low</em>.)</div>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action_type" value="run_auth_scan">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">URL đăng nhập:</label>
+                        <input type="text" name="login_url" class="form-control fs-6" value="{{ login_url }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mục tiêu đăng nhập:</label>
+                        <textarea name="login_goal" class="form-control" rows="2" required>{{ login_goal }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Prompt bảo mật (agent tự điều hướng tới đây rồi quét):</label>
+                        <textarea name="sec_prompt" class="form-control" rows="2" placeholder="Vd: Vào mục SQL Injection và kiểm tra lỗ hổng" required>{{ sec_prompt }}</textarea>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="confirm_authorized" id="confirmAuth2">
+                        <label class="form-check-label small" for="confirmAuth2">Tôi xác nhận được phép kiểm thử mục tiêu lab này.</label>
+                    </div>
+                    <button type="submit" class="btn btn-dark fw-bold"><i class="bi bi-box-arrow-in-right me-1"></i> Đăng nhập → Điều hướng → Quét</button>
+                </form>
+            </div>
+
+            {% if sec_report %}
+            <div class="card shadow-sm border-0 p-4 bg-white">
+                <h5 class="card-title text-danger fw-bold mb-3"><i class="bi bi-file-earmark-medical me-2"></i> Báo cáo Đánh giá Bảo mật</h5>
+                <hr>
+                <div class="mb-4">
+                    <h6 class="fw-bold text-dark mb-2"><i class="bi bi-robot text-primary me-2"></i> Đánh giá Tổng quan:</h6>
+                    <div class="p-3 bg-light border rounded shadow-sm fs-6 lh-base" style="white-space: pre-line;">{{ sec_report.ai_summary }}</div>
+                </div>
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i> Phát hiện & Khuyến nghị (CVE RAG):</h6>
+                <div class="row">
+                    {% for f in sec_report.findings %}
+                    <div class="col-md-12 mb-3">
+                        <div class="card border-warning shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="card-title text-warning-emphasis fw-bold mb-0">Mã: <span class="badge bg-secondary fs-6">{{ f.cve }}</span></h6>
+                                    <span class="badge bg-warning text-dark px-3 py-1 fs-6">Mức độ: {{ f.severity }}</span>
+                                </div>
+                                <p class="mb-2"><strong>Mô tả:</strong> {{ f.description }}</p>
+                                <p class="mb-0 text-success fw-semibold"><i class="bi bi-wrench-adjustable me-1"></i> <strong>Khuyến nghị:</strong> {{ f.recommendation }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

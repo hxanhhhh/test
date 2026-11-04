@@ -11,16 +11,22 @@ print("🚀 Bắt đầu tiến trình nạp RAG vào ChromaDB...")
 print(f"📁 Thư mục Tri thức: {KB_DIR}")
 print(f"🗄️ Thư mục ChromaDB: {CHROMA_PATH}")
 
+# Các trường metadata được phép đưa vào collection_cve (phục vụ đối chiếu version/CPE).
+CVE_META_KEYS = ("product", "version", "cpe",
+                 "version_start", "version_start_op",
+                 "version_end", "version_end_op")
+
+
 def rebuild_all_collections():
     client = chromadb.PersistentClient(path=CHROMA_PATH)
-    
+
     print("\n🧹 Đang khởi tạo và làm sạch các Collections...")
-    
+
     collections = {
         "collection_cve": "Lưu trữ thông tin chi tiết CVE, CVSS và mô tả",
         "collection_service_guide": "Lưu trữ hướng dẫn cấu hình và khắc phục theo dịch vụ"
     }
-    
+
     active_cols = {}
     for col_name, desc in collections.items():
         try:
@@ -28,7 +34,7 @@ def rebuild_all_collections():
             print(f" -> Đã xóa Collection cũ: {col_name}")
         except Exception:
             pass
-        
+
         active_cols[col_name] = client.create_collection(
             name=col_name,
             metadata={"hnsw:space": "cosine", "description": desc}
@@ -49,10 +55,10 @@ def rebuild_all_collections():
                         cve_id = item.get("cve_id", f"CVE_UNK_{cve_count}")
                         desc = item.get("description", "")
                         sev = item.get("severity", "UNKNOWN")
-                        
+
                         doc = f"CVE-ID: {cve_id}\nSeverity: {sev}\nDescription: {desc}"
                         metadata = {"cve_id": cve_id, "severity": sev}
-                        for key in ("product", "version", "cpe"):
+                        for key in CVE_META_KEYS:
                             if isinstance(item.get(key), str) and item[key]:
                                 metadata[key] = item[key]
                         active_cols["collection_cve"].upsert(
@@ -80,6 +86,7 @@ def rebuild_all_collections():
                     ids=[f"guide_{guide_count}"]
                 )
         print(f" -> Hoàn thành nạp {guide_count} cẩm nang dịch vụ!")
+
 
 if __name__ == "__main__":
     rebuild_all_collections()

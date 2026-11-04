@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "web-sec-browser": {
+      "type": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["-m", "browser_tools.server", "--run-id", "inspector", "--allowed-hosts", "127.0.0.1"],
+      "cwd": "."
+    }
+  }
+}

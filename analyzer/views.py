@@ -1,4 +1,6 @@
 import json
+import re
+import time
 
 import requests
 from django.conf import settings
@@ -10,12 +12,235 @@ from django.contrib import messages
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import TestProject, SecurityScan, TargetAsset, Service, SecurityFinding
+from .models import (TestProject, FunctionalTestCase, FunctionalTestRun, TestStepResult,
+                     SecurityScan, TargetAsset, Service, SecurityFinding)
 from .forms import NmapImportForm, ProjectForm
 from .parse_nmap import parse_nmap_xml
 from .analysis import DEFENSIVE_RULES, analyze_scan, plain_text
 
+
+# ---------------------------------------------------------------------------
+# Trang chủ hợp nhất: Dự án + Kiểm thử chức năng + Trinh sát bảo mật
+# ---------------------------------------------------------------------------
+
+DEMO_ACTIONS = {'generate_functional', 'run_functional', 'run_agent',
+                'run_security', 'run_active_scan', 'run_auth_scan'}
+
+
+def _demo_defaults():
+    return {
+        'target_url': 'http://127.0.0.1:4280/login.php',
+        'user_requirement': ('Điền admin vào ô Username, password vào ô Password, bấm Login; '
+                             'xác nhận đăng nhập thành công khi trang có chữ Logout'),
+        'test_cases': None,
+        'func_results': None,
+        'sec_report': None,
+        'saved_run_id': None,
+        'save_error': None,
+        'scan_url': 'http://127.0.0.1:3000/rest/products/search?q=test',
+        'active_scan_mode': False,
+        'login_url': 'http://127.0.0.1:4280/login.php',
+        'login_goal': ('Điền admin vào ô Username, password vào ô Password, bấm Login; '
+                       'xác nhận đăng nhập thành công khi trang có chữ Logout'),
+        'sec_prompt': 'Vào mục SQL Injection và kiểm tra lỗ hổng SQLi',
+    }
+
+
+def _save_functional_run(target_url, user_requirement, test_cases, func_results, model_name):
+    """Nối pipeline demo vào DB Django: lưu kịch bản + lần chạy + từng bước."""
+    project, _ = TestProject.objects.get_or_create(
+        target_url=target_url or '',
+        defaults={'name': f"Demo: {target_url or 'không rõ URL'}"},
+    )
+    case = FunctionalTestCase.objects.create(
+        project=project,
+        name=(user_requirement or 'Kịch bản AI')[:255],
+        steps=test_cases or [],
+        expected_result='',
+        source=FunctionalTestCase.Source.AI,
+        approved=True,
+    )
+    overall = (
+        FunctionalTestRun.Status.PASS
+        if func_results and all(r.get('status') == 'PASS' for r in func_results)
+        else FunctionalTestRun.Status.FAIL
+    )
+    run = FunctionalTestRun.objects.create(
+        test_case=case,
+        status=overall,
+        model_name=model_name or '',
+        started_at=timezone.now(),
+        finished_at=timezone.now(),
+    )
+    for index, res in enumerate(func_results or [], start=1):
+        step_status = (
+            TestStepResult.Status.PASS
+            if res.get('status') == 'PASS'
+            else TestStepResult.Status.FAIL
+        )
+        TestStepResult.objects.create(
+            run=run,
+            step_no=index,
+            action=str(res.get('action', '')),
+            tool='browser_mcp',
+            input={'value': res.get('value', ''), 'expected': res.get('expected', '')},
+            result={'detail': res.get('detail', ''), 'status': res.get('status', '')},
+            screenshot=str(res.get('evidence', '')),
+            status=step_status,
+            duration_ms=res.get('duration_ms'),
+        )
+    return run
+
+
+def _demo_dashboard(request, action_type):
+    """Xử lý các tab demo (chức năng / bảo mật) trên trang chủ hợp nhất."""
+    # Import muộn để Django khởi động không cần playwright.
+    from core_agent.functional_engine import FunctionalTestEngine
+    from core_agent.security_engine import SecurityTestEngine
+
+    context = {
+        'form': ProjectForm(),
+        'projects': TestProject.objects.order_by('-created_at'),
+    }
+    context.update(_demo_defaults())
+    target_url = request.POST.get('target_url', context['target_url'])
+    context['target_url'] = target_url
+
+    if action_type == 'generate_functional':
+        context['active_tab'] = 'functional'
+        user_req = request.POST.get('user_requirement', 'Kiểm tra truy cập trang web')
+        context['user_requirement'] = user_req
+        engine = FunctionalTestEngine()
+        context['test_cases'] = engine.generate_test_cases(user_req, target_url=target_url)
+
+    elif action_type == 'run_functional':
+        context['active_tab'] = 'functional'
+        user_req = request.POST.get('user_requirement', '')
+        if user_req:
+            context['user_requirement'] = user_req
+        raw = request.POST.get('selected_cases', '[]')
+        try:
+            test_cases = json.loads(raw.replace("'", '"'))
+        except Exception:
+            test_cases = []
+        engine = FunctionalTestEngine()
+        func_results = engine.execute_functional_test(test_cases, target_url=target_url)
+        context['test_cases'] = test_cases
+        context['func_results'] = func_results
+        try:
+            run = _save_functional_run(
+                target_url, context['user_requirement'], test_cases,
+                func_results, getattr(engine, 'ollama_model', ''),
+            )
+            context['saved_run_id'] = run.pk
+        except Exception as exc:
+            context['save_error'] = str(exc)
+
+    elif action_type == 'run_agent':
+        context['active_tab'] = 'functional'
+        goal = request.POST.get('user_requirement', '')
+        if goal:
+            context['user_requirement'] = goal
+        func_results, run_status = _run_agent(target_url, goal or 'Kiểm thử truy cập trang')
+        context['test_cases'] = None
+        context['func_results'] = func_results
+        context['agent_mode'] = True
+        context['agent_status'] = run_status
+        try:
+            run = _save_functional_run(target_url, goal, [], func_results, settings.OLLAMA_MODEL)
+            context['saved_run_id'] = run.pk
+        except Exception as exc:
+            context['save_error'] = str(exc)
+
+    elif action_type == 'run_security':
+        context['active_tab'] = 'security'
+        engine = SecurityTestEngine()
+        context['sec_report'] = engine.run_security_scan(target_url=target_url)
+
+    elif action_type == 'run_active_scan':
+        context['active_tab'] = 'security'
+        scan_url = request.POST.get('scan_url', target_url)
+        context['scan_url'] = scan_url
+        if request.POST.get('confirm_authorized') != 'on':
+            context['sec_report'] = {
+                'ai_summary': 'Bạn phải tích xác nhận được phép kiểm thử mục tiêu lab trước khi quét chủ động.',
+                'findings': [],
+            }
+        else:
+            from analyzer.active_scan import ActiveScanner
+            context['sec_report'] = ActiveScanner().scan(scan_url)
+        context['active_scan_mode'] = True
+
+    elif action_type == 'run_auth_scan':
+        context['active_tab'] = 'security'
+        login_url = request.POST.get('login_url', context['login_url'])
+        login_goal = request.POST.get('login_goal', context['login_goal'])
+        sec_prompt = request.POST.get('sec_prompt', context['sec_prompt'])
+        context['login_url'] = login_url
+        context['login_goal'] = login_goal
+        context['sec_prompt'] = sec_prompt
+        context['active_scan_mode'] = True
+        if request.POST.get('confirm_authorized') != 'on':
+            context['sec_report'] = {
+                'ai_summary': 'Bạn phải tích xác nhận được phép kiểm thử mục tiêu lab trước khi quét.',
+                'findings': [],
+            }
+        else:
+            context['sec_report'] = _auth_agent_scan(login_url, login_goal, sec_prompt)
+
+    return render(request, 'dashboard.html', context)
+
+
+def _auth_agent_scan(login_url, login_goal, sec_prompt):
+    """Agent đăng nhập -> tự điều hướng theo prompt -> dò & quét trang hiện tại bằng phiên."""
+    from urllib.parse import urlsplit
+    from analyzer.agent_runner import FunctionalAgent
+    from analyzer.active_scan import ActiveScanner
+    host = urlsplit(login_url).hostname or '127.0.0.1'
+    run_id = 'authagent-' + re.sub(r'[^0-9]', '', '%.3f' % time.time())[-14:]
+    agent = FunctionalAgent(ollama_model=settings.OLLAMA_MODEL,
+                            ollama_url=settings.OLLAMA_URL, allowed_hosts=[host])
+    try:
+        login_outcome, nav_outcome, url, cookies = agent.run_auth_security(
+            run_id, login_url, login_goal, sec_prompt)
+    except Exception as exc:
+        return {'ai_summary': f'Lỗi khi đăng nhập/điều hướng bằng Agent: {exc}', 'findings': []}
+    if not url:
+        return {'ai_summary': f"Đăng nhập: {login_outcome.get('status')}; không lấy được URL sau điều hướng.",
+                'findings': []}
+    report = ActiveScanner(cookies=cookies).scan_page(url)
+    head = (f"Đăng nhập: {login_outcome.get('status')} | "
+            f"Điều hướng theo prompt: {nav_outcome.get('status')} | {len(cookies)} cookie phiên.\n")
+    report['ai_summary'] = head + report.get('ai_summary', '')
+    return report
+
+
+def _run_agent(target_url, goal):
+    """Chạy tác tử LLM + browser_tools MCP, trả (results, status)."""
+    from urllib.parse import urlsplit
+    from analyzer.agent_runner import FunctionalAgent
+
+    host = urlsplit(target_url).hostname or '127.0.0.1'
+    run_id = 'agent-' + re.sub(r'[^0-9]', '', '%.3f' % time.time())[-14:]
+    agent = FunctionalAgent(ollama_model=settings.OLLAMA_MODEL,
+                            ollama_url=settings.OLLAMA_URL, allowed_hosts=[host])
+    try:
+        outcome = agent.run(run_id, target_url, goal)
+        return outcome.get('results', []), outcome.get('status', 'FAIL')
+    except Exception as exc:
+        return ([{'step_id': 1, 'action': 'agent', 'value': target_url,
+                  'expected': goal, 'status': 'FAIL',
+                  'detail': f'Lỗi chạy agent: {exc}', 'evidence': ''}], 'FAIL')
+
+
 def dashboard_view(request):
+    action_type = request.POST.get('action_type') if request.method == 'POST' else None
+
+    # Nhánh demo (kiểm thử chức năng / bảo mật)
+    if action_type in DEMO_ACTIONS:
+        return _demo_dashboard(request, action_type)
+
+    # Nhánh quản lý dự án (hành vi gốc, giữ nguyên để test pass)
     form = ProjectForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         project = form.save(commit=False)
@@ -25,7 +250,9 @@ def dashboard_view(request):
         messages.success(request, 'Đã tạo dự án.')
         return redirect('project_detail', project_id=project.pk)
     projects = TestProject.objects.order_by('-created_at')
-    return render(request, 'dashboard.html', {'projects': projects, 'form': form},
+    context = {'projects': projects, 'form': form, 'active_tab': 'project'}
+    context.update(_demo_defaults())
+    return render(request, 'dashboard.html', context,
                   status=400 if request.method == 'POST' else 200)
 
 

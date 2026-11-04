@@ -1,85 +1,134 @@
-# Web Sec Test
+# Web Sec Test — Kiểm thử Web Tự động bằng AI Agent & MCP
 
-Hệ thống Django kiểm thử web theo mô hình AI Agent + MCP. Phạm vi hiện tại là cấu trúc dữ liệu Functional Web Testing và nhập, đánh giá rủi ro từ kết quả Nmap bằng Ollama + ChromaDB. Chưa triển khai thực thi kiểm thử chức năng tự động. Phân tích bảo mật chỉ mô tả rủi ro, bằng chứng, CVE và khuyến nghị phòng thủ.
+Hệ thống Django kết hợp **AI Agent + MCP** để **kiểm thử chức năng** web (tự điều
+hướng, đăng nhập, điền form) và **kiểm thử bảo mật** (trinh sát thụ động + quét chủ
+động XSS/SQLi trong lab + đối chiếu CVE qua RAG). LLM chạy cục bộ bằng **Ollama**,
+kho tri thức CVE/hướng dẫn lưu trong **ChromaDB**. Đồ án tốt nghiệp — ngành An toàn
+thông tin, PTIT.
 
-## Dựng môi trường
+## Kiến trúc thư mục
 
-Chạy các lệnh từ thư mục chứa `manage.py`, dùng Python 3.12:
+```
+core/            Cấu hình Django (settings, urls)
+analyzer/        App chính:
+  views.py         Trang chủ hợp nhất (3 tab) + API
+  models.py        TestProject, FunctionalTestCase/Run, TestStepResult,
+                   SecurityScan, TargetAsset, Service, SecurityFinding
+  agent_runner.py  Tác tử LLM điều khiển trình duyệt qua browser_tools (Chế độ B)
+  functional_... → engine kịch bản tĩnh (Chế độ A) nằm trong core_agent
+  analysis.py      Đánh giá rủi ro nmap bằng Ollama + RAG (version/CPE + range,
+                   lọc CVE grounded chống "ảo")
+  active_scan.py   Quét chủ động XSS/SQLi, GIỚI HẠN host nội bộ, payload benign
+  parse_nmap.py    Parser Nmap XML
+  fetch_nvd_cve.py Tải CVE thật từ NVD (kèm product/version/CPE + khoảng phiên bản)
+  rebuild_rag.py   Nạp knowledge_base/ vào ChromaDB (2 collection)
+  knowledge_base/  Dữ liệu CVE (.json) + cẩm nang dịch vụ (.md)
+core_agent/      Engine demo dùng chung: functional_engine, browser_mcp,
+                 security_engine (trinh sát thụ động + RAG)
+browser_tools/   MCP server độc lập: 7 tool trình duyệt có giới hạn scope
+scripts/         run_all.sh, benchmark_lab.py, make_report.py, demo_*, smoke_lab.py
+```
+
+## Cài đặt
+
+Python 3.12+, chạy từ thư mục chứa `manage.py`:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 python manage.py migrate
-python manage.py showmigrations analyzer
 ```
 
-Các migration cần có dấu `[X]`. SQLite lưu tại `db.sqlite3`, kho vector tại `chroma_data/`; hai thư mục dữ liệu độc lập.
+SQLite lưu tại `db.sqlite3`; kho vector tại `chroma_data/`.
 
-## Ollama
-
-Cài theo [hướng dẫn Linux](https://docs.ollama.com/linux) hoặc [bản tải cho hệ điều hành](https://ollama.com/download). Nếu dịch vụ chưa chạy, mở terminal riêng:
+## Ollama (LLM cục bộ)
 
 ```bash
-ollama serve
+ollama serve                 # terminal riêng
+ollama pull qwen2.5-coder:3b # hoặc model mạnh hơn: qwen2.5:7b-instruct
 ```
 
-Trong terminal khác:
+Đổi model không cần sửa code: đặt biến môi trường `OLLAMA_MODEL`. Cấu hình khác:
+`OLLAMA_URL`, `CHROMA_PATH` (mặc định trong `core/settings.py`).
+
+## Nạp RAG (CVE + hướng dẫn)
 
 ```bash
-ollama pull qwen2.5-coder:3b
-ollama list
+python -m analyzer.fetch_nvd_cve   # tải CVE thật từ NVD (cần mạng; đặt NVD_API_KEY để đỡ rate-limit)
+python -m analyzer.rebuild_rag     # nạp vào collection_cve + collection_service_guide
 ```
 
-Kiểm tra API:
+Chạy lại `rebuild_rag` sẽ tạo lại 2 collection. CVE từ RAG chỉ là tham khảo; khớp
+phiên bản/CPE **không** đồng nghĩa máy đã bị lỗ hổng (finding ghi rõ độ tin cậy).
+
+## Chạy
 
 ```bash
-curl --fail http://localhost:11434/api/generate \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"qwen2.5-coder:3b","prompt":"Say hello briefly.","stream":false}'
+python manage.py runserver          # mở http://127.0.0.1:8000/
+# hoặc một lệnh khởi động tất cả (venv + Ollama + lab + migrate + server):
+bash scripts/run_all.sh
 ```
 
-Dịch vụ cần tiếp tục chạy trong khi sử dụng phân tích/chat. Xem [Ollama Quickstart](https://docs.ollama.com/quickstart).
+### Trang chủ có 3 tab
 
-## Nạp ChromaDB
+1. **Quản lý dự án** — tạo dự án, import `nmap_sample.xml`, bấm *Đánh giá rủi ro
+   bằng AI* (Ollama + RAG) rồi hỏi–đáp phòng thủ theo từng máy.
+2. **Kiểm thử chức năng**
+   - **Chế độ B — Agent tự động (khuyến nghị)**: nhập URL + mục tiêu tiếng Việt →
+     agent tự `inspect_page → fill/click/get_text`, **tự kiểm chứng trên trang** để
+     kết luận PASS/FAIL; mỗi bước có ảnh. Hợp luồng đăng nhập/điền form.
+   - **Chế độ A — Kịch bản tĩnh**: chỉ `navigate + check_title` (không đăng nhập).
+   - Mọi lần chạy lưu vào CSDL (xem `/admin/`).
+3. **Trinh sát & bảo mật**
+   - **Thụ động (chỉ đọc)**: header bảo mật, cookie flags, TLS, robots.txt + khuyến
+     nghị từ RAG.
+   - **Chủ động trong lab**: phát hiện reflected XSS / SQLi error-based trên tham số
+     GET. **Chỉ chạy với host nội bộ** (localhost/IP private), payload benign, có ô
+     xác nhận được phép. Mục tiêu công khai bị từ chối.
+
+## Lab (DVWA + OWASP Juice Shop)
+
+Yêu cầu Docker Engine + Compose v2:
 
 ```bash
-python -m analyzer.rebuild_rag
+docker compose -f docker-compose.lab.yml up -d
 ```
 
-Script tạo lại `collection_cve` và `collection_service_guide` từ `analyzer/knowledge_base/`. Việc chạy lại xóa dữ liệu cũ trong hai collection này. Lần đầu có thể cần Internet để tải embedding; không cần server Chroma riêng.
+| Site | URL |
+| --- | --- |
+| DVWA | http://127.0.0.1:4280/ (lần đầu: `/setup.php` → Create/Reset Database, `admin`/`password`) |
+| Juice Shop | http://127.0.0.1:3000/ |
 
-Cập nhật nguồn CVE từ NVD là bước tùy chọn:
+Quét chủ động nên nhắm Juice Shop (`/rest/products/search?q=`) vì không cần đăng nhập.
+
+## Browser MCP (7 tool)
+
+`browser_tools` là MCP server độc lập, phiên Chromium riêng mỗi run, giới hạn scope
+theo host/CIDR, che password, theo dõi redirect an toàn. 7 tool: `navigate`,
+`inspect_page`, `click`, `fill`, `get_text`, `get_current_url`, `screenshot`.
 
 ```bash
-python -m analyzer.fetch_nvd_cve
-python -m analyzer.rebuild_rag
+python -m browser_tools.server --run-id run-01 --allowed-hosts 127.0.0.1 localhost
+# kiểm tra bằng MCP Inspector:
+npx @modelcontextprotocol/inspector@2.9.0 --config mcp-inspector.json
 ```
 
-Script tải tối đa 20 kết quả mỗi từ khóa. CVE từ truy vấn vector chỉ là thông tin tham khảo; khớp phiên bản không xác nhận máy có lỗ hổng.
+## Benchmark & Báo cáo
 
-## Chạy và kiểm tra
+```bash
+python scripts/benchmark_lab.py            # chức năng + bảo mật thụ động + chủ động -> media/benchmarks/*.json
+python scripts/benchmark_lab.py --only active
+python scripts/make_report.py --pdf        # gộp DB + benchmark -> media/reports/*.html (+ .pdf)
+```
+
+## Kiểm thử
 
 ```bash
 python manage.py check
-python manage.py runserver
+python manage.py test analyzer             # test Django + đào sâu (range CVE, grounded, agent, active scan)
+python -m unittest tests.test_browser_tools -v   # test 7 tool MCP (cần Chromium + loopback)
 ```
 
-Mở <http://127.0.0.1:8000/>. File `nmap_sample.xml` chứa localhost với SSH cổng 22 và CUPS cổng 631.
-
-```bash
-python manage.py makemigrations --check --dry-run
-python manage.py test
-```
-
-Migration đã được tạo lại theo model BA, dành cho DB mới. Model gồm `TestProject`, `FunctionalTestCase`, `FunctionalTestRun`, `TestStepResult`, `SecurityScan`, `TargetAsset`, `Service` và `SecurityFinding`.
-
-## Sử dụng giao diện
-
-1. Tạo project ở trang chủ, nhập tên, URL, mô tả và phạm vi cho phép (mỗi dòng một host/IP/CIDR).
-2. Tab Functional hiển thị test case đã có hoặc thông báo chưa có test case.
-3. Tab Security cho phép nhập `nmap_sample.xml` vào project hiện tại. Sau import, trình duyệt chuyển đến trang scan với thông báo.
-4. Trang scan hiển thị assets, services và findings. Nhấn **Đánh giá rủi ro bằng AI** để đánh giá các dịch vụ của toàn scan.
-5. Xem severity, confidence, evidence và recommendation; hỏi đáp phòng thủ theo từng máy.
-
-Cấu hình qua biến môi trường `OLLAMA_MODEL`, `OLLAMA_URL`, `CHROMA_PATH` (các giá trị mặc định nằm trong `core/settings.py`). Không cần file `.env`; ứng dụng đọc môi trường của tiến trình.
+Phân tích bảo mật chỉ mô tả rủi ro, bằng chứng, CVE và khuyến nghị phòng thủ; quét
+chủ động chỉ phát hiện dấu hiệu trong lab được phép, không khai thác.

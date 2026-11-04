@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Local browser fixture</title></head>
+<body>
+  <h1>Local browser fixture</h1>
+  <label for="user">Username</label><input id="user" name="username">
+  <label for="pass">Password</label><input id="pass" type="password" value="fixture-secret">
+  <button id="login">Login</button>
+  <h2 id="state">Logged out</h2>
+  <a href="/browser.html?next=1">Next page</a>
+  <a href="http://localhost:9/forbidden">Outside scope</a>
+  <button disabled>Disabled button</button>
+  <button hidden>Hidden button</button>
+  <input type="hidden" value="hidden-value">
+  <button aria-label="Accessible action">Visual action</button>
+  <button id="remove">Remove username</button>
+  <select aria-label="Choices"><option>First</option><option>Second</option></select>
+  <textarea aria-label="Notes"></textarea>
+  <form method="post" action="/login-redirect"><button>Submit login</button></form>
+  <h3 id="long-heading"></h3>
+  <p id="long-text"></p>
+  <script>
+    const state = document.getElementById('state');
+    if (document.cookie.includes('fixture_login=yes')) state.textContent = 'Logged in';
+    document.getElementById('login').onclick = () => {
+      document.cookie = 'fixture_login=yes; path=/; SameSite=Lax';
+      state.textContent = 'Logged in';
+    };
+    document.getElementById('remove').onclick = () => document.getElementById('user').remove();
+    document.getElementById('long-heading').textContent = 'Long label '.repeat(40);
+    document.getElementById('long-text').textContent = 'local text '.repeat(400);
+  </script>
+</body>
+</html>

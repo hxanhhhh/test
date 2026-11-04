@@ -1,8 +1,15 @@
+import os
 import chromadb
+
+# Thống nhất đường dẫn kho vector với phần Django (settings.CHROMA_PATH).
+# Mặc định "chroma_data" (cùng thư mục mà rebuild_rag.py và analysis.py dùng),
+# có thể ghi đè bằng biến môi trường CHROMA_PATH.
+CHROMA_PATH = os.environ.get("CHROMA_PATH", "chroma_data")
+
 
 class CVERAGDatabase:
     def __init__(self):
-        self.client = chromadb.PersistentClient(path="chroma_db")
+        self.client = chromadb.PersistentClient(path=CHROMA_PATH)
         self.collection = self.client.get_or_create_collection(name="web_cve_knowledge")
         self._seed_data()
 

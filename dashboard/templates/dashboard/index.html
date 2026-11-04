@@ -114,6 +114,16 @@
                     <i class="bi bi-journal-check me-2"></i> Bước 3: Báo cáo Kết quả Thực thi & Bằng chứng Trực quan
                 </h5>
                 <hr>
+                {% if saved_run_id %}
+                <div class="alert alert-info py-2 mb-3">
+                    <i class="bi bi-database-check me-1"></i> Đã lưu lần chạy này vào CSDL Django (Run #{{ saved_run_id }}). Xem chi tiết tại <code>/admin/</code>.
+                </div>
+                {% endif %}
+                {% if save_error %}
+                <div class="alert alert-warning py-2 mb-3">
+                    <i class="bi bi-exclamation-triangle me-1"></i> Không lưu được vào CSDL: {{ save_error }}
+                </div>
+                {% endif %}
                 <div class="row">
                     {% for res in func_results %}
                     <div class="col-md-6 mb-4">

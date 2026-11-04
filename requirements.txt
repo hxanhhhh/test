@@ -3,3 +3,5 @@
 Django==6.0.7
 chromadb==1.5.9
 requests==2.34.2
+playwright==1.63.0
+mcp==1.30.0
