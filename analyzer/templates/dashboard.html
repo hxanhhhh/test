@@ -264,6 +264,79 @@
                 </form>
             </div>
 
+            <!-- Kiểm thử bằng Kali (orchestrator: pipeline / agent) -->
+            <div class="card shadow-sm border-primary border-2 p-4 mb-4 bg-white">
+                <h5 class="card-title text-primary fw-bold mb-2"><i class="bi bi-diagram-3 me-2"></i> Kiểm thử bằng Kali (orchestrator)</h5>
+                <p class="text-muted small mb-2">Chuỗi tool Kali thật tự chọn theo dịch vụ: recon (nmap) → quét web (whatweb/nuclei/nikto) → (nếu HTTPS) sslscan → (nếu URL có <code>?param</code>) sqlmap/dalfox. Chỉ host lab nội bộ.</p>
+                <p class="small mb-3">Máy Kali: <span id="kaliBadge" class="badge bg-secondary">đang kiểm tra…</span> <small id="kaliUrl" class="text-muted"></small></p>
+                <form id="kaliForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mục tiêu (host lab):</label>
+                        <input type="text" name="target" class="form-control fs-6" value="127.0.0.1" placeholder="127.0.0.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">URL cụ thể — kèm <code>?param</code> để test SQLi/XSS (tùy chọn):</label>
+                        <input type="text" name="url" class="form-control fs-6" placeholder="http://127.0.0.1:3000/rest/products/search?q=test">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Cookie phiên — cho sqlmap sau đăng nhập (tùy chọn):</label>
+                        <input type="text" name="cookie" class="form-control fs-6" placeholder="PHPSESSID=...; security=low">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chế độ:</label>
+                        <select name="mode" class="form-select fs-6">
+                            <option value="pipeline">Pipeline cố định (ổn định — khuyên demo)</option>
+                            <option value="agent">Agent LLM tự chọn tool</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="kaliBtn" class="btn btn-primary fw-bold"><i class="bi bi-play-fill me-1"></i> Chạy kiểm thử Kali</button>
+                </form>
+                <div id="kaliResult" class="mt-3"></div>
+            </div>
+            <script>
+            (function(){
+              var sev={Critical:'bg-dark',High:'bg-danger',Medium:'bg-warning text-dark',Low:'bg-success',Info:'bg-secondary'};
+              var badge=document.getElementById('kaliBadge'), kurl=document.getElementById('kaliUrl');
+              fetch("{% url 'kali_status' %}").then(function(r){return r.json();}).then(function(d){
+                badge.textContent=d.ok?'online':'offline';
+                badge.className='badge '+(d.ok?'bg-success':'bg-danger');
+                kurl.textContent=' ('+(d.url||'')+')';
+              }).catch(function(){badge.textContent='offline';badge.className='badge bg-danger';});
+
+              var form=document.getElementById('kaliForm'), out=document.getElementById('kaliResult'), btn=document.getElementById('kaliBtn');
+              var csrf=form.querySelector('[name=csrfmiddlewaretoken]').value;
+              form.addEventListener('submit',function(e){
+                e.preventDefault();
+                btn.disabled=true; var old=btn.innerHTML; btn.innerHTML='Đang chạy…';
+                out.innerHTML='<div class="alert alert-info py-2 small">Đang chạy chuỗi tool trên Kali, có thể vài phút…</div>';
+                fetch("{% url 'kali_pentest_api' %}",{method:'POST',headers:{'X-CSRFToken':csrf},body:new FormData(form)})
+                .then(function(r){return r.json();}).then(function(d){
+                  btn.disabled=false; btn.innerHTML=old;
+                  if(!d.ok && d.error){out.innerHTML='<div class="alert alert-danger py-2 small">'+d.error+'</div>';return;}
+                  var s=d.summary||{};
+                  var h='<h6 class="fw-bold">Kết quả ('+(d.mode||'')+') — '+(d.target||'')+'</h6>';
+                  h+='<p class="small mb-2">Tool chạy: '+s.tools_run+' · Phát hiện: '+s.total+' &nbsp;';
+                  ['Critical','High','Medium','Low','Info'].forEach(function(k){
+                    h+=' <span class="badge '+sev[k]+'">'+k[0]+' '+(s[k]||0)+'</span>';});
+                  h+='</p><table class="table table-sm table-bordered align-top"><thead><tr><th>Tool</th><th>KQ</th><th>Phát hiện</th></tr></thead><tbody>';
+                  (d.steps||[]).forEach(function(st){
+                    var det='';
+                    (st.findings||[]).forEach(function(f){
+                      det+='<div class="small"><span class="badge '+sev[f.severity||'Info']+'">'+(f.severity||'')+'</span> <strong>'+(f.title||'')+'</strong>: '+(f.description||'')+'</div>';});
+                    h+='<tr><td class="small">'+st.tool+'<br><span class="text-muted">'+(st.title||'')+'</span></td>'
+                      +'<td class="small '+(st.ok?'text-success fw-bold':'text-danger fw-bold')+'">'+(st.ok?'OK':'--')+'</td>'
+                      +'<td class="small">'+(st.n_findings||0)+(det?'<details><summary>chi tiết</summary>'+det+'</details>':'')+'</td></tr>';
+                  });
+                  h+='</tbody></table>';
+                  if(d.scan_url){h+='<a class="btn btn-sm btn-outline-primary mt-2" href="'+d.scan_url+'">Xem chi tiết scan #'+d.scan_id+' (đã lưu DB)</a>';}
+                  out.innerHTML=h;
+                }).catch(function(err){btn.disabled=false;btn.innerHTML=old;
+                  out.innerHTML='<div class="alert alert-danger py-2 small">Lỗi: '+err+'</div>';});
+              });
+            })();
+            </script>
+
             {% if sec_report %}
             <div class="card shadow-sm border-0 p-4 bg-white">
                 <h5 class="card-title text-danger fw-bold mb-3"><i class="bi bi-file-earmark-medical me-2"></i> Báo cáo Đánh giá Bảo mật</h5>

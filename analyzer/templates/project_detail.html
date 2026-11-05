@@ -9,8 +9,100 @@
 {% for case in test_cases %}<article><h3>{{ case.name }}</h3><p>Nguồn: {{ case.get_source_display }} · Đã duyệt: {{ case.approved|yesno:'Có,Không' }}</p><ol>{% for step in case.steps %}<li>{{ step.action }} — {{ step.expected }}</li>{% endfor %}</ol><p>{{ case.expected_result }}</p></article>{% empty %}<p>Chưa có test case</p>{% endfor %}
 </section>
 {% else %}
-<section><h2>Security</h2><p>Nhập dữ liệu quét có sẵn để đánh giá rủi ro và khuyến nghị khắc phục.</p>
-<form action="{% url 'project_import_nmap' project.pk %}" method="post" enctype="multipart/form-data">{% csrf_token %}{{ import_form.as_p }}<button>Nhập Nmap XML</button></form>
-<h3>Các lần quét</h3><ul>{% for scan in scans %}<li><a href="{% url 'scan_detail' scan.pk %}">Scan #{{ scan.pk }} — {{ scan.target }}</a> · {{ scan.get_status_display }} · {{ scan.scan_method }}</li>{% empty %}<li>Chưa có lần quét.</li>{% endfor %}</ul></section>
+<section>
+<h2>Security — Kiểm thử qua Kali</h2>
+<p class="text">Máy Kali: <span id="kali-badge" class="badge badge-wait">đang kiểm tra…</span>
+  <small id="kali-url"></small></p>
+
+<h3>1) Recon tự động (nmap qua Kali)</h3>
+<p class="text">Chạy <strong>nmap thật trên Kali</strong> rồi tự nạp dịch vụ để đánh giá CVE. Mục tiêu phải là <strong>lab nội bộ</strong>.</p>
+<form action="{% url 'project_recon' project.pk %}" method="post">{% csrf_token %}
+<label>Mục tiêu recon (IP/host/URL lab):</label>
+<input type="text" name="target" value="{{ project.target_url }}" placeholder="127.0.0.1" required>
+<button>Recon tự động</button>
+</form>
+
+<h3>2) Kiểm thử bảo mật tự động (orchestrator)</h3>
+<p class="text">Chuỗi tool Kali tự chọn theo dịch vụ: recon → quét web → vuln → (nếu có param) sqlmap/dalfox.</p>
+<form id="pentest-form">{% csrf_token %}
+  <label>Mục tiêu (host lab):</label>
+  <input type="text" name="target" value="{{ project.target_url }}" placeholder="127.0.0.1" required>
+  <label>URL cụ thể — kèm <code>?param</code> để test SQLi/XSS (tùy chọn):</label>
+  <input type="text" name="url" placeholder="http://127.0.0.1/dvwa/vulnerabilities/sqli/?id=1&Submit=Submit">
+  <label>Cookie phiên — cho sqlmap sau đăng nhập (tùy chọn):</label>
+  <input type="text" name="cookie" placeholder="PHPSESSID=...; security=low">
+  <label>Chế độ:</label>
+  <select name="mode">
+    <option value="pipeline">Pipeline cố định (ổn định — khuyên demo)</option>
+    <option value="agent">Agent LLM tự chọn tool</option>
+  </select>
+  <button type="submit" id="pentest-btn">Chạy kiểm thử Kali</button>
+</form>
+<div id="pentest-result" class="text"></div>
+
+<h3>Các lần quét</h3>
+<ul>{% for scan in scans %}<li><a href="{% url 'scan_detail' scan.pk %}">Scan #{{ scan.pk }} — {{ scan.target }}</a> · {{ scan.get_status_display }} · {{ scan.scan_method }}</li>{% empty %}<li>Chưa có lần quét.</li>{% endfor %}</ul>
+</section>
+
+<style>
+.badge{padding:2px 8px;border-radius:10px;font-size:.85em;color:#fff}
+.badge-wait{background:#999}.badge-on{background:#2e7d32}.badge-off{background:#c62828}
+.sev{display:inline-block;min-width:54px;padding:1px 6px;border-radius:6px;color:#fff;font-size:.8em;text-align:center}
+.sev-Critical{background:#6a1b9a}.sev-High{background:#c62828}.sev-Medium{background:#ef6c00}.sev-Low{background:#2e7d32}.sev-Info{background:#546e7a}
+#pentest-result table{border-collapse:collapse;width:100%;margin-top:8px}
+#pentest-result th,#pentest-result td{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top;font-size:.9em}
+.step-ok{color:#2e7d32;font-weight:bold}.step-bad{color:#c62828;font-weight:bold}
+</style>
+<script>
+(function(){
+  var badge=document.getElementById('kali-badge'), url=document.getElementById('kali-url');
+  fetch("{% url 'kali_status' %}").then(function(r){return r.json();}).then(function(d){
+    if(d.ok){badge.textContent='online';badge.className='badge badge-on';}
+    else{badge.textContent='offline';badge.className='badge badge-off';}
+    url.textContent=' ('+(d.url||'')+')';
+  }).catch(function(){badge.textContent='offline';badge.className='badge badge-off';});
+
+  var form=document.getElementById('pentest-form'),
+      out=document.getElementById('pentest-result'),
+      btn=document.getElementById('pentest-btn');
+  var csrf=form.querySelector('[name=csrfmiddlewaretoken]').value;
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    btn.disabled=true; var old=btn.textContent; btn.textContent='Đang chạy…';
+    out.innerHTML='<p>Đang chạy chuỗi tool trên Kali, có thể vài phút…</p>';
+    fetch("{% url 'project_pentest' project.pk %}",{method:'POST',
+      headers:{'X-CSRFToken':csrf},body:new FormData(form)})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      btn.disabled=false; btn.textContent=old;
+      if(!d.ok && d.error){out.innerHTML='<p class="step-bad">'+d.error+'</p>';return;}
+      var s=d.summary||{};
+      var html='<h4>Kết quả ('+(d.mode||'')+') — '+(d.target||'')+'</h4>';
+      html+='<p>Tool chạy: '+s.tools_run+' · Phát hiện: '+s.total+' &nbsp; '
+          +'<span class="sev sev-Critical">C '+s.Critical+'</span> '
+          +'<span class="sev sev-High">H '+s.High+'</span> '
+          +'<span class="sev sev-Medium">M '+s.Medium+'</span> '
+          +'<span class="sev sev-Low">L '+s.Low+'</span> '
+          +'<span class="sev sev-Info">I '+s.Info+'</span></p>';
+      html+='<table><tr><th>Tool</th><th>KQ</th><th>Phát hiện</th></tr>';
+      (d.steps||[]).forEach(function(st){
+        var det='';
+        (st.findings||[]).forEach(function(f){
+          det+='<div><span class="sev sev-'+(f.severity||'Info')+'">'+(f.severity||'')+'</span> '
+              +'<strong>'+(f.title||'')+'</strong>: '+(f.description||'')+'</div>';
+        });
+        html+='<tr><td>'+st.tool+'<br><small>'+(st.title||'')+'</small></td>'
+            +'<td class="'+(st.ok?'step-ok':'step-bad')+'">'+(st.ok?'OK':'--')+'</td>'
+            +'<td>'+(st.n_findings||0)+(det?'<details><summary>chi tiết</summary>'+det+'</details>':'')+'</td></tr>';
+      });
+      html+='</table>';
+      if(d.scan_url){html+='<p><a href="'+d.scan_url+'">Xem chi tiết scan #'+d.scan_id+' (đã lưu DB)</a></p>';}
+      out.innerHTML=html;
+    })
+    .catch(function(err){btn.disabled=false;btn.textContent=old;
+      out.innerHTML='<p class="step-bad">Lỗi: '+err+'</p>';});
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

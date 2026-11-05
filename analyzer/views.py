@@ -304,7 +304,122 @@ def scan_analyze(request, scan_id):
     return redirect('scan_detail', scan_id=scan.pk)
 
 
-def import_nmap_file(nmap_file, project=None, project_name='Dự án mới'):
+@require_POST
+def project_recon(request, project_id):
+    """Recon TỰ ĐỘNG: chạy nmap thật trên Kali rồi nạp dịch vụ vào DB (thay upload XML)."""
+    project = get_object_or_404(TestProject, pk=project_id)
+    target = (request.POST.get('target') or project.target_url or '').strip()
+    back = f'/projects/{project_id}/?tab=security'
+    if not target:
+        messages.error(request, 'Hãy nhập mục tiêu recon (IP/host/URL lab nội bộ).')
+        return redirect(back)
+    from io import BytesIO
+    from analyzer.kali import build_registry
+    try:
+        res = build_registry().call('nmap', target=target)
+    except Exception as exc:
+        messages.error(request, f'Không gọi được Kali: {exc}. Kiểm tra kali_server + KALI_URL.')
+        return redirect(back)
+    if res.get('findings') and res['findings'][0].get('title') == 'Ngoài phạm vi lab':
+        messages.error(request, 'Mục tiêu không phải host nội bộ (chỉ recon lab được phép).')
+        return redirect(back)
+    xml = res.get('xml') or ''
+    if '<nmaprun' not in xml:
+        messages.error(request, 'nmap qua Kali không trả kết quả. Kiểm tra kali_server đang chạy và mục tiêu đúng.')
+        return redirect(back)
+    try:
+        scan = import_nmap_file(BytesIO(xml.encode('utf-8', 'ignore')),
+                                project=project, scan_method='nmap-kali')
+    except (ValueError, ValidationError) as exc:
+        messages.error(request, f'Không phân tích được kết quả nmap: {exc}')
+        return redirect(back)
+    messages.success(request, 'Recon tự động (nmap qua Kali) hoàn tất. Bấm "Đánh giá rủi ro bằng AI".')
+    return redirect('scan_detail', scan_id=scan.pk)
+
+
+def kali_status(request):
+    """Kiểm tra kết nối tới máy Kali (gọi /health của kali_server). Trả JSON để
+    dashboard hiển thị badge 'Kali: online/offline'."""
+    from analyzer.kali.client import KaliClient
+    client = KaliClient()
+    health = client.health()
+    ok = isinstance(health, dict) and 'error' not in health
+    return JsonResponse({'ok': ok, 'url': client.base_url, 'health': health})
+
+
+def _shape_result(result):
+    """Rút gọn dict kết quả orchestrator thành payload JSON cho UI."""
+    steps = [{
+        'tool': s['tool'], 'title': s['title'], 'ok': s['ok'],
+        'n_findings': s['n_findings'],
+        'findings': [{
+            'severity': f.get('severity', 'Info'),
+            'title': f.get('title', ''),
+            'description': (f.get('description') or '')[:400],
+        } for f in s['findings']],
+    } for s in result['steps']]
+    return {
+        'ok': result.get('ok', False), 'lab': result.get('lab', True),
+        'mode': result.get('mode'), 'target': result.get('target'),
+        'url': result.get('url'), 'summary': result['summary'],
+        'steps': steps, 'error': result.get('error'),
+    }
+
+
+def _run_and_save(project, target, url, cookie, mode):
+    """Chạy orchestrator, LƯU vào DB (SecurityScan) rồi trả payload kèm link scan."""
+    from django.urls import reverse
+    from analyzer.kali.orchestrator import run_pipeline, run_agent
+    from analyzer.kali.persist import save_orchestrator_result
+    runner = run_agent if mode == 'agent' else run_pipeline
+    result = runner(target, url=url, cookie=cookie)
+    payload = _shape_result(result)
+    if result.get('lab', True):
+        try:
+            scan = save_orchestrator_result(project, result)
+            payload['scan_id'] = scan.pk
+            payload['scan_url'] = reverse('scan_detail', args=[scan.pk])
+        except Exception as exc:  # noqa: BLE001
+            payload['save_error'] = str(exc)
+    return payload
+
+
+@require_POST
+def project_pentest(request, project_id):
+    """Chạy orchestrator qua Kali cho một project, lưu DB rồi trả JSON cho UI."""
+    project = get_object_or_404(TestProject, pk=project_id)
+    target = (request.POST.get('target') or project.target_url or '').strip()
+    url = (request.POST.get('url') or '').strip() or None
+    cookie = (request.POST.get('cookie') or '').strip()
+    if not target:
+        return JsonResponse({'ok': False, 'error': 'Thiếu mục tiêu kiểm thử.'}, status=400)
+    try:
+        return JsonResponse(_run_and_save(project, target, url, cookie, request.POST.get('mode')))
+    except Exception as exc:  # noqa: BLE001
+        return JsonResponse({'ok': False, 'error': f'Lỗi khi chạy: {exc}'}, status=500)
+
+
+@require_POST
+def kali_pentest_api(request):
+    """Chạy orchestrator qua Kali từ Dashboard; lưu vào một project mặc định."""
+    target = (request.POST.get('target') or '').strip()
+    url = (request.POST.get('url') or '').strip() or None
+    cookie = (request.POST.get('cookie') or '').strip()
+    if not target and url:
+        from urllib.parse import urlparse
+        target = urlparse(url).hostname or ''
+    if not target:
+        return JsonResponse({'ok': False, 'error': 'Thiếu mục tiêu (host hoặc URL lab).'}, status=400)
+    project, _ = TestProject.objects.get_or_create(
+        name='Kali Orchestrator (Dashboard)',
+        defaults={'description': 'Tự tạo để lưu kết quả chạy orchestrator từ Dashboard.'})
+    try:
+        return JsonResponse(_run_and_save(project, target, url, cookie, request.POST.get('mode')))
+    except Exception as exc:  # noqa: BLE001
+        return JsonResponse({'ok': False, 'error': f'Lỗi khi chạy: {exc}'}, status=500)
+
+
+def import_nmap_file(nmap_file, project=None, project_name='Dự án mới', scan_method='nmap-import'):
     hosts = parse_nmap_xml(nmap_file)
     target = ', '.join(host['ip'] for host in hosts)
     if len(target) > 255:
@@ -315,7 +430,7 @@ def import_nmap_file(nmap_file, project=None, project_name='Dự án mới'):
             project.full_clean()
             project.save()
         scan = SecurityScan.objects.create(
-            project=project, target=target, scan_method='nmap-import',
+            project=project, target=target, scan_method=scan_method,
             status=SecurityScan.Status.COMPLETED,
             started_at=timezone.now(), finished_at=timezone.now(),
         )

@@ -125,5 +125,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Local defensive review services.
 OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434/api/generate')
-OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'qwen2.5-coder:3b')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'qwen2.5:7b-instruct')
 CHROMA_PATH = os.environ.get('CHROMA_PATH', str(BASE_DIR / 'chroma_data'))
+
+# Máy Kali (MCP-Kali-Server). Django chạy máy chính, Kali là VM riêng -> đặt IP VM.
+# Ví dụ: export KALI_URL=http://192.168.56.10:5000
+KALI_URL = os.environ.get('KALI_URL', 'http://127.0.0.1:5000')
