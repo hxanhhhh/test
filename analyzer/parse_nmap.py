@@ -1,7 +1,7 @@
 """Read Nmap results without executing network operations."""
 from ipaddress import ip_address
 import xml.etree.ElementTree as ET
-
+from analyzer.models import TargetAsset, Service
 
 def parse_nmap_xml(nmap_file):
     try:
@@ -66,3 +66,37 @@ def parse_nmap_xml(nmap_file):
     if not hosts:
         raise ValueError('File Nmap không chứa máy mục tiêu đang hoạt động (up).')
     return hosts
+def auto_save_and_trigger_rag(target_asset_id, xml_file_path):
+    """
+    1. Đọc file XML Nmap bằng parse_nmap_xml có sẵn.
+    2. Lưu các dịch vụ quét được vào bảng Service trong DB.
+    3. Tự động kích hoạt pipeline RAG để đối chiếu CVE.
+    """
+    try:
+        
+        parsed_hosts = parse_nmap_xml(xml_file_path)
+        target_asset = TargetAsset.objects.get(id=target_asset_id)
+        
+        saved_count = 0
+        for host_data in parsed_hosts:
+            
+            for s in host_data['services']:
+                Service.objects.update_or_create(
+                    asset=target_asset,
+                    port=s['port'],
+                    protocol=s['protocol'],
+                    defaults={
+                        'service_name': s['name'],
+                        'product': s['product'],
+                        'service_version': s['version'],
+                    
+                    }
+                )
+                saved_count += 1
+                
+        print(f"[Thành công A] Đã lưu {saved_count} dịch vụ vào bảng Service từ Nmap.")
+        
+        return True
+    except Exception as e:
+        print(f"[Lỗi tích hợp Nmap->RAG]: {e}")
+        return False

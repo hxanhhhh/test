@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-
+from analyzer.cve_matcher import run_nmap_cve_pipeline
 from .models import (TestProject, FunctionalTestCase, FunctionalTestRun, TestStepResult,
                      SecurityScan, TargetAsset, Service, SecurityFinding)
 from .forms import NmapImportForm, ProjectForm
@@ -333,6 +333,13 @@ def project_recon(request, project_id):
     except (ValueError, ValidationError) as exc:
         messages.error(request, f'Không phân tích được kết quả nmap: {exc}')
         return redirect(back)
+    
+    try:
+        from analyzer.cve_matcher import run_nmap_cve_pipeline
+        run_nmap_cve_pipeline()
+    except Exception as e:
+        print(f"Lỗi chạy RAG: {e}")
+
     messages.success(request, 'Recon tự động (nmap qua Kali) hoàn tất. Bấm "Đánh giá rủi ro bằng AI".')
     return redirect('scan_detail', scan_id=scan.pk)
 
