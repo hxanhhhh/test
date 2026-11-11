@@ -1,7 +1,9 @@
+from analyzer.views import generate_security_report
 from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('report/export/', views.generate_security_report, name='export_report'),
     path('', views.dashboard_view, name='dashboard'),
     path('projects/<int:project_id>/', views.project_detail, name='project_detail'),
     path('projects/<int:project_id>/import/', views.project_import_nmap, name='project_import_nmap'),

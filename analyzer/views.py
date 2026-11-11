@@ -10,6 +10,8 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.utils import timezone
+from django.shortcuts import get_object_or_404, render
+from analyzer.models import TargetAsset, Service, SecurityFinding
 from django.views.decorators.http import require_POST
 from analyzer.cve_matcher import run_nmap_cve_pipeline
 from .models import (TestProject, FunctionalTestCase, FunctionalTestRun, TestStepResult,
@@ -190,6 +192,26 @@ def _demo_dashboard(request, action_type):
 
     return render(request, 'dashboard.html', context)
 
+def generate_security_report(request, target_id=None):
+    if target_id:
+        asset = get_object_or_404(TargetAsset, id=target_id)
+        services = Service.objects.filter(asset=asset)
+        findings = SecurityFinding.objects.filter(asset=asset)
+    else:
+        asset = TargetAsset.objects.last()
+        services = Service.objects.all()
+        findings = SecurityFinding.objects.all()
+
+    context = {
+        'asset': asset,
+        'services': services,
+        'findings': findings,
+        'total_findings': findings.count(),
+        'high_severity_count': findings.filter(severity__iexact='High').count(),
+        'medium_severity_count': findings.filter(severity__iexact='Medium').count(),
+        'low_severity_count': findings.filter(severity__iexact='Low').count(),
+    }
+    return render(request, 'analyzer/report_template.html', context)
 
 def _auth_agent_scan(login_url, login_goal, sec_prompt):
     """Agent đăng nhập -> tự điều hướng theo prompt -> dò & quét trang hiện tại bằng phiên."""
