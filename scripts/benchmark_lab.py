@@ -27,7 +27,7 @@ if ROOT not in sys.path:
 from analyzer.agent_runner import FunctionalAgent          # noqa: E402
 from core_agent.security_engine import SecurityTestEngine  # noqa: E402
 
-DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:3b")
+DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 DEFAULT_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 
 FUNCTIONAL_SCENARIOS = [

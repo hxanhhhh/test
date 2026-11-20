@@ -49,3 +49,4 @@ dist/
 # Operating system files
 .DS_Store
 Thumbs.db
+chroma_db/

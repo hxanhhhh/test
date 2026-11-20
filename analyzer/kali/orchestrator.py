@@ -159,12 +159,13 @@ def _ask_llm(prompt, timeout=60):
     return json.loads(r.json()["response"])
 
 
-def _agent_prompt(host, url, catalog, ran, findings):
+def _agent_prompt(host, url, catalog, ran, findings, has_cookie: bool = False):
     lines = ["Bạn là agent kiểm thử bảo mật web trên LAB được phép.",
              f"Mục tiêu: host={host} url={url}",
+             f"Phiên xác thực: {"có cookie đăng nhập (tự động gắn vào sqlmap/dalfox)" if has_cookie else "chưa có cookie"}.",
              "Chọn BƯỚC TIẾP THEO: một tool trong danh mục (theo nhóm).",
-             "Quy tắc: recon trước (nmap/whatweb), rồi quét lỗ hổng (nuclei/nikto),",
-             "rồi khai thác (sqlmap/dalfox) nếu hợp lý. Không lặp lại tool đã chạy.",
+             "Quy tắc: recon nhẹ (whatweb), ưu tiên sqlmap/dalfox khi url có tham số truy vấn (?);",
+             "tránh wpscan nếu không phải WordPress. Không lặp lại tool đã chạy.",
              "", "Danh mục tool (nhóm -> tool):"]
     for c, items in catalog.items():
         lines.append(f"- {c}: " + ", ".join(n for n, _ in items))
@@ -208,7 +209,7 @@ def run_agent(target, url=None, cookie="", client=None, max_steps=6, on_step=Non
 
     for _ in range(max_steps - 1):
         try:
-            pick = _ask_llm(_agent_prompt(host, target_url, catalog, ran, findings))
+            pick = _ask_llm(_agent_prompt(host, target_url, catalog, ran, findings, has_cookie=bool(cookie)))
         except Exception:
             # LLM không dùng được -> chuyển sang pipeline cho phần còn lại.
             pipe = run_pipeline(target, url=target_url, cookie=cookie,

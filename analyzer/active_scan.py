@@ -47,12 +47,15 @@ def is_lab_host(host):
 
 
 class ActiveScanner:
-    def __init__(self, timeout=8, cookies=None):
+    def __init__(self, timeout=8, cookies=None, use_headless=False, run_id=None):
         self.timeout = timeout
+        self.use_headless = bool(use_headless)
+        self.run_id = run_id
+        self.cookies = list(cookies or [])
         # Dùng Session để tái sử dụng cookie phiên (vd phiên đăng nhập lấy từ Agent),
         # nhờ đó quét được trang cần đăng nhập.
         self.http = requests.Session()
-        for c in (cookies or []):
+        for c in self.cookies:
             try:
                 self.http.cookies.set(c.get("name"), c.get("value"),
                                       domain=c.get("domain"), path=c.get("path", "/"))
@@ -192,6 +195,23 @@ class ActiveScanner:
         candidates = self._discover(page_url, html)
         if parsed.query:
             candidates = [page_url] + [c for c in candidates if c != page_url]
+
+        added_dynamic = 0
+        if self.use_headless:
+            try:
+                from .spa_crawler import crawl_spa_endpoints
+                spa_res = crawl_spa_endpoints(
+                    page_url, cookies=self.cookies, run_id=self.run_id
+                )
+                seen = set(candidates)
+                for dyn_url in (spa_res.get("dynamic_urls") or []):
+                    if dyn_url and dyn_url not in seen:
+                        seen.add(dyn_url)
+                        candidates.append(dyn_url)
+                        added_dynamic += 1
+            except Exception:
+                added_dynamic = 0
+
         findings = []
         for cand in candidates:
             rep = self.scan(cand)
@@ -203,9 +223,14 @@ class ActiveScanner:
             findings.append(_f("INFO-ACTIVE-CLEAN", "Low",
                 f"Dò {len(candidates)} endpoint trên trang, chưa thấy dấu hiệu XSS/SQLi.",
                 "Kiểm thử cơ bản; nên rà soát thủ công + DAST đầy đủ."))
+        spa_line = (
+            f"- Headless SPA Crawler: +{added_dynamic} route/endpoint động (DOM/XHR).\n"
+            if self.use_headless else ""
+        )
         wrapped = self._wrap(page_url, findings)
         wrapped["ai_summary"] = (f"Quét chủ động sau đăng nhập trên trang: {page_url}\n"
-                                 f"- Đã dò {len(candidates)} endpoint có tham số.\n" + wrapped["ai_summary"])
+                                 f"- Đã dò {len(candidates)} endpoint có tham số.\n"
+                                 f"{spa_line}" + wrapped["ai_summary"])
         return wrapped
 
     @staticmethod

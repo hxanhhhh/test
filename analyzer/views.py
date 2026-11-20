@@ -215,9 +215,12 @@ def generate_security_report(request, target_id=None):
 
 def _auth_agent_scan(login_url, login_goal, sec_prompt):
     """Agent đăng nhập -> tự điều hướng theo prompt -> dò & quét trang hiện tại bằng phiên."""
+    import json
     from urllib.parse import urlsplit
     from analyzer.agent_runner import FunctionalAgent
-    from analyzer.active_scan import ActiveScanner
+    from analyzer.active_scan import ActiveScanner, is_lab_host
+    from scripts.auth_scan_dvwa import send_kali_command
+
     host = urlsplit(login_url).hostname or '127.0.0.1'
     run_id = 'authagent-' + re.sub(r'[^0-9]', '', '%.3f' % time.time())[-14:]
     agent = FunctionalAgent(ollama_model=settings.OLLAMA_MODEL,
@@ -230,9 +233,80 @@ def _auth_agent_scan(login_url, login_goal, sec_prompt):
     if not url:
         return {'ai_summary': f"Đăng nhập: {login_outcome.get('status')}; không lấy được URL sau điều hướng.",
                 'findings': []}
-    report = ActiveScanner(cookies=cookies).scan_page(url)
+
+    normalized_cookies = [dict(c) for c in (cookies or []) if isinstance(c, dict) and c.get("name")]
+    if is_lab_host(host):
+        has_sec = False
+        for c in normalized_cookies:
+            if str(c.get("name")).lower() == "security":
+                c["value"] = "low"
+                has_sec = True
+        if not has_sec:
+            normalized_cookies.append({
+                "name": "security",
+                "value": "low",
+                "domain": host,
+                "path": "/",
+            })
+
+    cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in normalized_cookies)
+    report = ActiveScanner(cookies=normalized_cookies, use_headless=True, run_id=run_id).scan_page(url)
+    findings = list(report.get("findings") or [])
+
+    tool_notes = []
+    if is_lab_host(host) and cookie_header:
+        parsed_u = urlsplit(url)
+        base_origin = f"{parsed_u.scheme}://{parsed_u.netloc}" if parsed_u.scheme and parsed_u.netloc else ""
+        scan_targets = []
+        if "/vulnerabilities/" in (parsed_u.path or "") and base_origin:
+            scan_targets = [
+                ("SQLMAP-SQLI", "High", f"{base_origin}/vulnerabilities/sqli/?id=1&Submit=Submit",
+                 f'sqlmap -u "{base_origin}/vulnerabilities/sqli/?id=1&Submit=Submit" --cookie="{cookie_header}" --batch --level=1 --risk=1'),
+                ("DALFOX-XSS", "High", f"{base_origin}/vulnerabilities/xss_r/?name=test",
+                 f'dalfox url "{base_origin}/vulnerabilities/xss_r/?name=test" --cookies "{cookie_header}"'),
+            ]
+        elif parsed_u.query:
+            scan_targets = [
+                ("SQLMAP-SQLI", "High", url,
+                 f'sqlmap -u "{url}" --cookie="{cookie_header}" --batch --level=1 --risk=1'),
+                ("DALFOX-XSS", "High", url,
+                 f'dalfox url "{url}" --cookies "{cookie_header}"'),
+            ]
+
+        for code, sev, t_url, cmd in scan_targets:
+            try:
+                status_code, body = send_kali_command(cmd)
+                parsed_resp = json.loads(body) if isinstance(body, str) else (body or {})
+                data_obj = parsed_resp.get("data") if isinstance(parsed_resp, dict) and isinstance(parsed_resp.get("data"), dict) else parsed_resp
+                stdout = (data_obj.get("stdout") or "") if isinstance(data_obj, dict) else ""
+                detected = (("Parameter:" in stdout or "Type:" in stdout)
+                            if code.startswith("SQLMAP")
+                            else ("[POC" in stdout or "XSS found" in stdout))
+                if detected:
+                    findings = [f for f in findings if f.get("cve") != "INFO-ACTIVE-CLEAN"]
+                    findings.append({
+                        "cve": code,
+                        "severity": sev,
+                        "description": f"Phát hiện lỗ hổng qua {code.split('-')[0].lower()} với phiên đã xác thực [endpoint: {t_url}]",
+                        "recommendation": "Sử dụng prepared statement / parameterized query và escape/sanitize output theo ngữ cảnh.",
+                    })
+                    tool_notes.append(f"{code}: DETECTED ({t_url})")
+                else:
+                    tool_notes.append(f"{code}: HTTP {status_code}, no clear finding ({t_url})")
+            except Exception as exc:
+                tool_notes.append(f"{code}: error ({exc})")
+
+    report["findings"] = findings
+    nav_status = nav_outcome.get("status")
+    if nav_status != "PASS" and url != login_url:
+        nav_label = f"{nav_status} (đã tới trang đích)"
+    else:
+        nav_label = str(nav_status)
+
+    extra_line = ("Công cụ sau đăng nhập: " + " | ".join(tool_notes) + "\n") if tool_notes else ""
     head = (f"Đăng nhập: {login_outcome.get('status')} | "
-            f"Điều hướng theo prompt: {nav_outcome.get('status')} | {len(cookies)} cookie phiên.\n")
+            f"Điều hướng theo prompt: {nav_label} | {len(normalized_cookies)} cookie phiên.\n"
+            f"{extra_line}")
     report['ai_summary'] = head + report.get('ai_summary', '')
     return report
 

@@ -17,21 +17,24 @@ SEVERITY = "Medium"
 DO_GUARD = True      # True = chỉ cho host lab
 
 
-def build_command(value):
+def build_command(value, cookie: str = ""):
     """Dựng lệnh shell. value = host (PARAM='target') hoặc URL/chuỗi nguyên văn."""
-    a = value
-    qa = shlex.quote(a)
-    return f"dalfox url {qa} --silence --no-color"
+    qa = shlex.quote(value)
+    cmd = f"dalfox url {qa} --silence --no-color"
+    if cookie:
+        cmd += f" -b {shlex.quote(cookie)}"
+    return cmd
 
 
 def register(reg, client):
     @reg.tool(name=NAME, title=TITLE, category=CATEGORY,
-              description=DESCRIPTION, params=[PARAM])
+              description=DESCRIPTION, params=[PARAM, "cookie"])
     def _run(**kw):
         value = str(kw.get(PARAM, "") or "")
+        cookie = str(kw.get("cookie", "") or "").strip()
         if DO_GUARD and not guard(value):
             return blocked(NAME, value)
         arg = target_host(value) if PARAM == "target" else value
-        return run_tool(client, NAME, build_command(arg), TIMEOUT,
+        return run_tool(client, NAME, build_command(arg, cookie=cookie), TIMEOUT,
                         raw_parse(NAME, SEVERITY))
     return _run

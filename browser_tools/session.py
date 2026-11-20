@@ -304,7 +304,22 @@ class BrowserSession:
     @guarded
     async def get_current_url(self):
         return {"url": self._page.url, "title": await self._page.title()}
-
+    @guarded
+    async def get_cookies(self, url: str = "", default_security: str = "low"):
+        if self._context is None:
+            raise ToolError("SESSION_CLOSED", "Browser context is not initialized.")
+        raw_cookies = await self._context.cookies([url]) if url else await self._context.cookies()
+        cookie_map = {}
+        for c in raw_cookies:
+            name = c.get("name")
+            value = c.get("value")
+            if name and value is not None:
+                cookie_map[name] = value
+        if "PHPSESSID" not in cookie_map:
+            raise ToolError("COOKIE_NOT_FOUND", "PHPSESSID not found in browser context.")
+        security = cookie_map.get("security") or default_security
+        header = f"PHPSESSID={cookie_map['PHPSESSID']}; security={security}"
+        return {"cookies": cookie_map, "cookie_header": header}
     @guarded
     async def screenshot(self, name: str):
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", name):

@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-MODEL="${OLLAMA_MODEL:-qwen2.5-coder:3b}"
+MODEL="${OLLAMA_MODEL:-qwen2.5:7b-instruct}"
 export OLLAMA_MODEL="$MODEL"
 
 echo "==> 1/5 Môi trường Python + phụ thuộc"
